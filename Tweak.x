@@ -1,4 +1,4 @@
-// VCAM V75.0: Enhanced Connection Watcher
+// VCAM V76.0: HTTP Low-Latency Engine
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 #import <AVFoundation/AVFoundation.h>
@@ -10,7 +10,7 @@
 #import <objc/runtime.h>
 
 static BOOL enabled = YES;
-static NSString *rtspURL = @"rtsp://192.168.1.44:554/live";
+static NSString *rtspURL = @"http://192.168.1.44:8888/live";
 static BOOL addNoise = YES;
 static CVPixelBufferRef vBuffer = NULL;
 static AVPlayerItemVideoOutput *videoOutput = NULL;
@@ -24,16 +24,12 @@ static NSString *getPrefsPath() {
     return rootful;
 }
 
-static void writeLog(NSString *msg) {
-    NSString *path = @"/var/mobile/Documents/vcam_ERROR.txt";
-    NSString *content = [NSString stringWithFormat:@"[%@] %@\n", [NSDate date], msg];
-    NSFileHandle *handle = [NSFileHandle fileHandleForWritingAtPath:path];
-    if (handle) {
-        [handle seekToEndOfFile];
-        [handle writeData:[content dataUsingEncoding:NSUTF8StringEncoding]];
-        [handle closeFile];
-    } else {
-        [content writeToFile:path atomically:YES encoding:NSUTF8StringEncoding error:nil];
+static void loadPrefs() {
+    NSDictionary *prefs = [[NSDictionary alloc] initWithContentsOfFile:getPrefsPath()];
+    if (prefs) {
+        enabled = prefs[@"enabled"] ? [prefs[@"enabled"] boolValue] : YES;
+        rtspURL = prefs[@"rtspURL"] ?: @"http://192.168.1.44:8888/live";
+        addNoise = prefs[@"addNoise"] ? [prefs[@"addNoise"] boolValue] : YES;
     }
 }
 
@@ -57,26 +53,12 @@ static void applyStealthNoise(CVPixelBufferRef buffer) {
     CVPixelBufferUnlockBaseAddress(buffer, 0);
 }
 
-static void loadPrefs() {
-    NSDictionary *prefs = [[NSDictionary alloc] initWithContentsOfFile:getPrefsPath()];
-    if (prefs) {
-        enabled = prefs[@"enabled"] ? [prefs[@"enabled"] boolValue] : YES;
-        rtspURL = prefs[@"rtspURL"] ?: @"rtsp://192.168.1.44:554/live";
-        addNoise = prefs[@"addNoise"] ? [prefs[@"addNoise"] boolValue] : YES;
-    }
-}
-
 static void startStreaming() {
     loadPrefs();
     if (!enabled) return;
 
     NSURL *url = [NSURL URLWithString:rtspURL];
-    if (!url) {
-        writeLog([NSString stringWithFormat:@"ERR: Invalid URL: %@", rtspURL]);
-        return;
-    }
-
-    writeLog([NSString stringWithFormat:@"START: Connecting to %@", rtspURL]);
+    if (!url) return;
 
     AVURLAsset *asset = [AVURLAsset URLAssetWithURL:url options:@{AVURLAssetPreferPreciseDurationAndTimingKey: @YES}];
     AVPlayerItem *item = [AVPlayerItem playerItemWithAsset:asset];
@@ -87,10 +69,9 @@ static void startStreaming() {
     
     player = [AVPlayer playerWithPlayerItem:item];
     player.actionAtItemEnd = AVPlayerActionAtItemEndNone;
-    
-    [player addObserver:[[NSObject alloc] init] forKeyPath:@"status" options:0 context:NULL];
-    
-    writeLog(@"INFO: Player initialized and play() called");
+    if ([player respondsToSelector:@selector(setAutomaticallyWaitsToMinimizeStalling:)]) {
+        [player setAutomaticallyWaitsToMinimizeStalling:NO];
+    }
     [player play];
 }
 
@@ -98,17 +79,6 @@ static void startStreaming() {
     if (enabled) {
         if (!player) startStreaming();
         
-        if (player.status == AVPlayerStatusFailed) {
-            if (debugLabel) [debugLabel setText:@"VCAM: PLAYER ERROR"];
-            static BOOL logged = NO;
-            if (!logged) {
-                writeLog([NSString stringWithFormat:@"ERR: Player failed: %@", player.error.localizedDescription]);
-                logged = YES;
-            }
-            player = nil;
-            return %orig(sbuf);
-        }
-
         if (player.status == AVPlayerStatusReadyToPlay) {
             CMTime itemTime = [videoOutput itemTimeForHostTime:CACurrentMediaTime()];
             if ([videoOutput hasNewPixelBufferForItemTime:itemTime]) {
@@ -121,7 +91,6 @@ static void startStreaming() {
                 }
             }
         }
-        
         if (vBuffer) return vBuffer;
     }
     return %orig(sbuf);
