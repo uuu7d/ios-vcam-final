@@ -1,0 +1,9 @@
+Package: com.murkaska.virtualcampro
+Name: VirtualCamPro
+Depends: mobilesubstrate, preferenceloader
+Version: 71.0.1
+Architecture: iphoneos-arm64
+Description: Standalone RTSP Virtual Camera for iOS
+Maintainer: MurkAskA
+Author: MurkAskA
+Section: Tweaks
