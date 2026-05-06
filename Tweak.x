@@ -13,12 +13,12 @@
 
 static BOOL enabled = YES;
 static NSString *rtspURL = @"http://192.168.1.44:8888/live";
-static BOOL addNoise = YES;
+static BOOL addNoise = NO;
 static CVPixelBufferRef vBuffer = NULL;
 static AVPlayerItemVideoOutput *videoOutput = NULL;
 static AVPlayer *player = NULL;
-static UILabel *debugLabel = NULL;
 static dispatch_queue_t streamerQueue = NULL;
+static BOOL isPlayerInitialized = NO;
 
 static NSString *getIPAddress() {
     NSString *address = @"error";
@@ -52,12 +52,12 @@ static void loadPrefs() {
     if (prefs) {
         enabled = prefs[@"enabled"] ? [prefs[@"enabled"] boolValue] : YES;
         rtspURL = prefs[@"rtspURL"] ?: @"http://192.168.1.44:8888/live";
-        addNoise = prefs[@"addNoise"] ? [prefs[@"addNoise"] boolValue] : YES;
+        addNoise = prefs[@"addNoise"] ? [prefs[@"addNoise"] boolValue] : NO;
     }
 }
 
 static void applyStealthNoise(CVPixelBufferRef buffer) {
-    if (!buffer) return;
+    if (!buffer || !addNoise) return;
     CVPixelBufferLockBaseAddress(buffer, 0);
     unsigned char *base = (unsigned char *)CVPixelBufferGetBaseAddress(buffer);
     int width = (int)CVPixelBufferGetWidth(buffer);
@@ -66,7 +66,7 @@ static void applyStealthNoise(CVPixelBufferRef buffer) {
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
             int offset = (y * bytesPerRow) + (x * 4);
-            int noise = ((int)arc4random_uniform(7)) - 3;
+            int noise = ((int)arc4random_uniform(3)) - 1;
             for (int i = 0; i < 3; i++) {
                 int val = base[offset + i] + noise;
                 base[offset + i] = (unsigned char)MAX(0, MIN(255, val));
@@ -77,55 +77,42 @@ static void applyStealthNoise(CVPixelBufferRef buffer) {
 }
 
 static void startStreaming() {
+    if (isPlayerInitialized) return;
+    isPlayerInitialized = YES;
+    
     loadPrefs();
     if (!enabled) return;
-    
-    if (player) {
-        if (player.status == AVPlayerStatusFailed || player.status == AVPlayerStatusUnknown) {
-            [player pause];
-            player = nil;
-            videoOutput = nil;
-        } else {
-            return;
-        }
-    }
 
     NSURL *url = [NSURL URLWithString:rtspURL];
-    if (!url) {
-        if (debugLabel) [debugLabel setText:[NSString stringWithFormat:@"VCAM ERROR: Invalid URL\nIP: %@", getIPAddress()]];
-        return;
-    }
+    if (!url) return;
 
     dispatch_async(streamerQueue, ^{
-        AVURLAsset *asset = [AVURLAsset URLAssetWithURL:url options:@{
-            AVURLAssetPreferPreciseDurationAndTimingKey: @YES,
-            @"AVURLAssetHTTPHeaderFieldsKey": @{},
-            @"AVURLAssetHTTPTimeoutIntervalKey": @5.0
-        }];
-        
-        AVPlayerItem *item = [AVPlayerItem playerItemWithAsset:asset];
-        
-        NSDictionary *pixBuffAttributes = @{
-            (id)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA),
-            (id)kCVPixelBufferWidthKey: @1280,
-            (id)kCVPixelBufferHeightKey: @720
-        };
-        
-        videoOutput = [[AVPlayerItemVideoOutput alloc] initWithPixelBufferAttributes:pixBuffAttributes];
-        [item addOutput:videoOutput];
-        
-        player = [AVPlayer playerWithPlayerItem:item];
-        player.actionAtItemEnd = AVPlayerActionAtItemEndNone;
-        
-        if ([player respondsToSelector:@selector(setAutomaticallyWaitsToMinimizeStalling:)]) {
-            [player setAutomaticallyWaitsToMinimizeStalling:NO];
+        @try {
+            AVURLAsset *asset = [AVURLAsset URLAssetWithURL:url options:@{
+                AVURLAssetPreferPreciseDurationAndTimingKey: @YES,
+                @"AVURLAssetHTTPTimeoutIntervalKey": @10.0
+            }];
+            
+            AVPlayerItem *item = [AVPlayerItem playerItemWithAsset:asset];
+            
+            NSDictionary *pixBuffAttributes = @{
+                (id)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA)
+            };
+            
+            videoOutput = [[AVPlayerItemVideoOutput alloc] initWithPixelBufferAttributes:pixBuffAttributes];
+            [item addOutput:videoOutput];
+            
+            player = [AVPlayer playerWithPlayerItem:item];
+            player.actionAtItemEnd = AVPlayerActionAtItemEndNone;
+            
+            if ([player respondsToSelector:@selector(setAutomaticallyWaitsToMinimizeStalling:)]) {
+                [player setAutomaticallyWaitsToMinimizeStalling:NO];
+            }
+            
+            [player play];
+        } @catch (NSException *exception) {
+            isPlayerInitialized = NO;
         }
-        
-        [player play];
-        
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if (debugLabel) [debugLabel setText:[NSString stringWithFormat:@"VCAM: CONNECTING...\nURL: %@", rtspURL]];
-        });
     });
 }
 
@@ -133,30 +120,16 @@ static void startStreaming() {
     if (enabled) {
         if (!player) startStreaming();
         
-        if (player) {
-            if (player.status == AVPlayerStatusFailed) {
-                if (debugLabel) [debugLabel setText:[NSString stringWithFormat:@"VCAM ERROR: Connection Failed\nIP: %@", getIPAddress()]];
-                [player pause];
-                player = nil;
-                videoOutput = nil;
-            }
-
-            if (player.status == AVPlayerStatusReadyToPlay && videoOutput) {
-                CMTime itemTime = [videoOutput itemTimeForHostTime:CACurrentMediaTime()];
-                if ([videoOutput hasNewPixelBufferForItemTime:itemTime]) {
-                    CVPixelBufferRef newBuffer = [videoOutput copyPixelBufferForItemTime:itemTime itemTimeForDisplay:NULL];
-                    if (newBuffer) {
-                        if (vBuffer) CFRelease(vBuffer);
-                        vBuffer = newBuffer;
-                        if (addNoise) applyStealthNoise(vBuffer);
-                        if (debugLabel) [debugLabel setText:@"VCAM: STREAMING ACTIVE ✓"];
-                        return vBuffer;
-                    }
-                } else {
-                    if (debugLabel) [debugLabel setText:@"VCAM: BUFFERING..."];
+        if (player && player.status == AVPlayerStatusReadyToPlay && videoOutput) {
+            CMTime itemTime = [videoOutput itemTimeForHostTime:CACurrentMediaTime()];
+            if ([videoOutput hasNewPixelBufferForItemTime:itemTime]) {
+                CVPixelBufferRef newBuffer = [videoOutput copyPixelBufferForItemTime:itemTime itemTimeForDisplay:NULL];
+                if (newBuffer) {
+                    if (vBuffer) CFRelease(vBuffer);
+                    vBuffer = newBuffer;
+                    if (addNoise) applyStealthNoise(vBuffer);
+                    return vBuffer;
                 }
-            } else if (player.status == AVPlayerStatusUnknown) {
-                if (debugLabel) [debugLabel setText:@"VCAM: LOADING..."];
             }
         }
         
@@ -168,25 +141,12 @@ static void startStreaming() {
 %hook AVCaptureVideoPreviewLayer
 - (void)layoutSublayers {
     %orig;
-    if (enabled) {
-        if (vBuffer) {
-            self.contents = (__bridge id)vBuffer;
-            self.contentsGravity = kCAGravityResizeAspectFill;
-        }
-        
-        if (!debugLabel) {
-            debugLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 40, 300, 60)];
-            debugLabel.textColor = [UIColor greenColor];
-            debugLabel.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.8];
-            debugLabel.font = [UIFont boldSystemFontOfSize:10];
-            debugLabel.numberOfLines = 3;
-            debugLabel.text = [NSString stringWithFormat:@"VCAM: INITIALIZING...\nIP: %@\nURL: %@", getIPAddress(), rtspURL];
-            [self addSublayer:debugLabel.layer];
-        }
-
+    if (enabled && vBuffer) {
         for (CALayer *sub in self.sublayers) {
-            if (sub != debugLabel.layer) sub.hidden = (vBuffer != NULL);
+            sub.hidden = YES;
         }
+        self.contents = (__bridge id)vBuffer;
+        self.contentsGravity = kCAGravityResizeAspectFill;
     }
 }
 %end
@@ -199,7 +159,7 @@ static void startStreaming() {
         CGImageRef cgImg = [context createCGImage:ci fromRect:ci.extent];
         UIImage *ui = [UIImage imageWithCGImage:cgImg];
         CGImageRelease(cgImg);
-        float quality = 0.85 + ((arc4random_uniform(10)) / 100.0);
+        float quality = 0.9 + ((arc4random_uniform(5)) / 100.0);
         return UIImageJPEGRepresentation(ui, quality);
     }
     return %orig;
@@ -207,6 +167,6 @@ static void startStreaming() {
 %end
 
 %ctor {
-    streamerQueue = dispatch_queue_create("com.murkaska.vcam.streamer", DISPATCH_QUEUE_SERIAL);
+    streamerQueue = dispatch_queue_create("com.murkaska.vcam.stream", DISPATCH_QUEUE_SERIAL);
     loadPrefs();
 }
