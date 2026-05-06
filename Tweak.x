@@ -1,4 +1,4 @@
-// VCAM V77.0: Ultimate KYC Stealth & Network Auto-Fix
+// VCAM V78.0: Ultimate KYC Stealth & USB-Ready Engine
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 #import <AVFoundation/AVFoundation.h>
@@ -8,6 +8,8 @@
 #import <CoreImage/CoreImage.h>
 #import <CoreGraphics/CoreGraphics.h>
 #import <objc/runtime.h>
+#include <ifaddrs.h>
+#include <arpa/inet.h>
 
 static BOOL enabled = YES;
 static NSString *rtspURL = @"http://192.168.1.44:8888/live";
@@ -17,6 +19,26 @@ static AVPlayerItemVideoOutput *videoOutput = NULL;
 static AVPlayer *player = NULL;
 static UILabel *debugLabel = NULL;
 
+static NSString *getIPAddress() {
+    NSString *address = @"error";
+    struct ifaddrs *interfaces = NULL;
+    struct ifaddrs *temp_addr = NULL;
+    int success = getifaddrs(&interfaces);
+    if (success == 0) {
+        temp_addr = interfaces;
+        while(temp_addr != NULL) {
+            if(temp_addr->ifa_addr->sa_family == AF_INET) {
+                if([[NSString stringWithUTF8String:temp_addr->ifa_name] isEqualToString:@"en0"]) {
+                    address = [NSString stringWithUTF8String:inet_ntoa(((struct sockaddr_in *)temp_addr->ifa_addr)->sin_addr)];
+                }
+            }
+            temp_addr = temp_addr->ifa_next;
+        }
+    }
+    freeifaddrs(interfaces);
+    return address;
+}
+
 static NSString *getPrefsPath() {
     NSString *rootless = @"/var/jb/var/mobile/Library/Preferences/com.murkaska.virtualcampro.plist";
     NSString *rootful = @"/var/mobile/Library/Preferences/com.murkaska.virtualcampro.plist";
@@ -24,16 +46,12 @@ static NSString *getPrefsPath() {
     return rootful;
 }
 
-static void writeLog(NSString *msg) {
-    NSString *path = @"/var/mobile/Documents/vcam_ERROR.txt";
-    NSString *content = [NSString stringWithFormat:@"[%@] %@\n", [NSDate date], msg];
-    NSFileHandle *handle = [NSFileHandle fileHandleForWritingAtPath:path];
-    if (handle) {
-        [handle seekToEndOfFile];
-        [handle writeData:[content dataUsingEncoding:NSUTF8StringEncoding]];
-        [handle closeFile];
-    } else {
-        [content writeToFile:path atomically:YES encoding:NSUTF8StringEncoding error:nil];
+static void loadPrefs() {
+    NSDictionary *prefs = [[NSDictionary alloc] initWithContentsOfFile:getPrefsPath()];
+    if (prefs) {
+        enabled = prefs[@"enabled"] ? [prefs[@"enabled"] boolValue] : YES;
+        rtspURL = prefs[@"rtspURL"] ?: @"http://192.168.1.44:8888/live";
+        addNoise = prefs[@"addNoise"] ? [prefs[@"addNoise"] boolValue] : YES;
     }
 }
 
@@ -47,7 +65,7 @@ static void applyStealthNoise(CVPixelBufferRef buffer) {
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
             int offset = (y * bytesPerRow) + (x * 4);
-            int noise = ((int)arc4random_uniform(5)) - 2;
+            int noise = ((int)arc4random_uniform(7)) - 3; // Enhanced noise for KYC
             for (int i = 0; i < 3; i++) {
                 int val = base[offset + i] + noise;
                 base[offset + i] = (unsigned char)MAX(0, MIN(255, val));
@@ -57,23 +75,12 @@ static void applyStealthNoise(CVPixelBufferRef buffer) {
     CVPixelBufferUnlockBaseAddress(buffer, 0);
 }
 
-static void loadPrefs() {
-    NSDictionary *prefs = [[NSDictionary alloc] initWithContentsOfFile:getPrefsPath()];
-    if (prefs) {
-        enabled = prefs[@"enabled"] ? [prefs[@"enabled"] boolValue] : YES;
-        rtspURL = prefs[@"rtspURL"] ?: @"http://192.168.1.44:8888/live";
-        addNoise = prefs[@"addNoise"] ? [prefs[@"addNoise"] boolValue] : YES;
-    }
-}
-
 static void startStreaming() {
     loadPrefs();
     if (!enabled) return;
 
     NSURL *url = [NSURL URLWithString:rtspURL];
     if (!url) return;
-
-    writeLog([NSString stringWithFormat:@"ATTEMPT: Connecting to %@", rtspURL]);
 
     AVURLAsset *asset = [AVURLAsset URLAssetWithURL:url options:@{AVURLAssetPreferPreciseDurationAndTimingKey: @YES}];
     AVPlayerItem *item = [AVPlayerItem playerItemWithAsset:asset];
@@ -95,7 +102,7 @@ static void startStreaming() {
         if (!player) startStreaming();
         
         if (player.status == AVPlayerStatusFailed) {
-            if (debugLabel) [debugLabel setText:@"VCAM: NETWORK ERROR"];
+            if (debugLabel) [debugLabel setText:[NSString stringWithFormat:@"VCAM ERROR | My IP: %@", getIPAddress()]];
             player = nil;
         }
 
@@ -107,7 +114,7 @@ static void startStreaming() {
                     if (vBuffer) CFRelease(vBuffer);
                     vBuffer = newBuffer;
                     if (addNoise) applyStealthNoise(vBuffer);
-                    if (debugLabel) [debugLabel setText:@"VCAM: STREAMING"];
+                    if (debugLabel) [debugLabel setText:@"VCAM: STREAMING ACTIVE"];
                 }
             }
         }
@@ -126,11 +133,12 @@ static void startStreaming() {
         }
         
         if (!debugLabel) {
-            debugLabel = [[UILabel alloc] initWithFrame:CGRectMake(20, 50, 240, 30)];
+            debugLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 40, 300, 40)];
             debugLabel.textColor = [UIColor greenColor];
-            debugLabel.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.5];
-            debugLabel.font = [UIFont boldSystemFontOfSize:13];
-            debugLabel.text = @"VCAM: CONNECTING...";
+            debugLabel.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.7];
+            debugLabel.font = [UIFont boldSystemFontOfSize:11];
+            debugLabel.numberOfLines = 2;
+            debugLabel.text = [NSString stringWithFormat:@"VCAM: INITIALIZING...\nMy IP: %@", getIPAddress()];
             [self addSublayer:debugLabel.layer];
         }
 
