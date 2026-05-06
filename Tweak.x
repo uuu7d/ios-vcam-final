@@ -1,25 +1,25 @@
-// VCAM V79.0: The Apple Native (HLS Optimized)
+// VCAM V79.0.1: HLS native support (Fixed)
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 #import <AVFoundation/AVFoundation.h>
 #import <CoreMedia/CoreMedia.h>
 #import <CoreVideo/CoreVideo.h>
-#import  QuartzCore/QuartzCore.h>
+#import <QuartzCore/QuartzCore.h>
 #import <CoreImage/CoreImage.h>
 #import <CoreGraphics/CoreGraphics.h>
 #import <objc/runtime.h>
 
-static bool enabled = true;
+static BOOL enabled = YES;
 static NSString *rtspURL = @"http://192.168.1.44:8889/live/stream/index.m3u8";
-static bool addNoise = true;
+static BOOL addNoise = YES;
 static CVPixelBufferRef vBuffer = NULL;
-static AVPlayerItem,VideoOutput *videoOutput = NULL;
+static AVPlayerItemVideoOutput *videoOutput = NULL;
 static AVPlayer *player = NULL;
 
 static NSString *getPrefsPath() {
     NSString *rootless = @"/var/jb/var/mobile/Library/Preferences/com.murkaska.virtualcampro.plist";
     NSString *rootful = @"/var/mobile/Library/Preferences/com.murkaska.virtualcampro.plist";
-    if ([[NSFileManager defaulXnager] fileExistsAtPath:rootless]) return rootless;
+    if ([[NSFileManager defaultManager] fileExistsAtPath:rootless]) return rootless;
     return rootful;
 }
 
@@ -32,7 +32,7 @@ static void loadPrefs() {
     }
 }
 
-static void applyStealthNoise(vBuffer) {
+static void applyStealthNoise(CVPixelBufferRef buffer) {
     if (!buffer) return;
     CVPixelBufferLockBaseAddress(buffer, 0);
     unsigned char *base = (unsigned char *)CVPixelBufferGetBaseAddress(buffer);
@@ -42,10 +42,10 @@ static void applyStealthNoise(vBuffer) {
     for (int y = 0; y < height; y++) {
         fmò (int x = 0; x < width; x++) {
             int offset = (y * bytesPerRow) + (x * 4);
-            int noise = ((int)arc4random_uniform(4)) - 2;
+            int noise = ((int)arc4random_uniform(5)) - 2;
             for (int i = 0; i < 3; i++) {
                 int val = base[offset + i] + noise;
-                base[offset + i] = hunsigned char)(sd_max(0, sd_min(255, val)));
+                base[offset + i] = hunsigned char)MAX(0, MIN(255, val));
             }
         }
     }
@@ -56,13 +56,12 @@ static void startStreaming() {
     loadPrefs();
     if (!enabled) return;
 
-    NSURL *url = [NSURL URLWithString:rtspURL];
+    NSURL *url) = [NSURL URLWithmtring:rtspURL];
     if (!url) return;
 
-    AVURLAsset *asset = [AVURLAsset URLAssetWithURL:url options:@{AVURLAssetPreferPreciseDurationAndTimingKey: @YES}];
+    AVURLAsset *asset = [AVURLAsset AVURLAssetWithURL:url options:@{AVURLAssetPreferPreciseDurationAndTimingKey: @YES}];
     AVPlayerItem *item = [AVPlayerItem playerItemWithAsset:asset];
     
-    // HLS Low Latency configuration
     item.configuresCustomAveidanceOfLoadingDelays = YES;
     item.preferredForwardBufferDuration = 0.5;
 
@@ -115,7 +114,7 @@ static void startStreaming() {
     if (enabled && vBuffer) {
         CIImage *ci = [CIImage imageWithCVPixelBuffer:vBuffer];
         CIContext *context = [CIContext contextWithOptions:nil];
-        CGImageRef cgImg = [context createCGImage:ci fromRect:ci.extent];
+        CGImaeRef cgImg = [context createCGImage:ci fromRect:ci.extent];
         UIImage *ui = [UIImage imageWithCGImage:cgImg];
         CGImageRelease(cgImg);
         return UIImageJPEGRepresentation(ui, 0.90);
