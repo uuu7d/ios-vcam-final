@@ -1,1 +1,68 @@
-Ly8gVkNBTSBWODEuMDogRGlhZ25vc3RpYyBEYXNoYm9hcmQgJiBFbmhhbmNlZCBMb2dnaW5nCiNpbXBvcnQgPFVJS2l0L1VJS2l0Lmg+CiNpbXBvcnQgPEFWRm91bmRhdGlvbi9BVkZvdW5kYXRpb24uaD4KI2ltcG9ydCA8Q29yZU1lZGlhL0NvcmVNZWRpYS5oPgojaW1wb3J0IDxDb3JlVmlkZW8vQ29yZVZpZGVvLmg+CiNpbXBvcnQgPFF1YXJ0ekNvcmUvUXVhcnR6Q29yZS5oPgojaW1wb3J0IDxDb3JlSW1hZ2UvQ29yZUltYWdlLmg+CgpzdGF0aWMgQk9PTCBlbmFibGVkID0gTk87CnN0YXRpYyBOU1N0cmluZyAqcnRzcFVSTCA9IEAiaHR0cDovLzE5Mi4xNjguMS40NDo4ODg5L2xpdmUvc3RyZWFtIjsKc3RhdGljIFVJTGFiZWwgKnN0YXR1c0xhYmVsID0gbmlsOwoKLy8gRGlhZ25vc3RpYyBMb2dnaW5nCnZvaWQgdmNhbV9sb2coTlNTdHJpbmcgKm1lc3NhZ2UpIHsKICAgIE5TU3RyaW5nICpsb2dQYXRoID0gQCIvdmFyL21vYmlsZS9Eb2N1bWVudHMvdmNhbV9ERUJVRy5sb2ciOwogICAgIE5TRGF0ZUZvcm1hdHRlciAqdGltZXN0YW1wID0gW05TRGF0ZUZvcm1hdHRlciBsb2NhbGl6ZWRTdHJpbmdGcm9tRGF0ZTpbTlNEYXRlIGRhdGV0IGRhdGVTdHlsZTpOU0RhdGVGb3JtYXR0ZXJTaG9ydFN0eWxlIHRpbWVTdHlsZTpOU0RhdGVGb3JtYXR0ZXJMb25nU3R5bGVdOwogICAgIE5TU3RyaW5nICpmb3JtYXR0ZWRNZXNzYWdlID0gW05TU3RyaW5nIHN0cmluZ1dpdGhGb3JtYXQ6QCJbJUBdICVAXG4iLCB0aW1lc3RhbXAsIG1lc3NhZ2VdOwogICAgIAogICAgIE5TRmlsZUhhbmRsZSAqZmlsZUhhbmRsZSA9IFtOU0ZpbGVIYW5kbGUgZmlsZUhhbmRsZUZvcldyaXRpbmdBdFBhdGg6bG9nUGF0aF07CiAgICBpZiAoZmlsZUhhbmRsZSkgewogICAgICAgIFtmaWxlSGFuZGxlIHNlZWtUb0VuZE9mRmlsZV07CiAgICAgICAgW2ZpbGVIYW5kbGUgd3JpdGVEYXRhOltmb3JtYXR0ZWRNZXNzYWdlIGRhdGFVc2luZ0VuY29kaW5nOk5TVVRGOEVuY29kaW5nXV07CiAgICAgICAgW2ZpbGVIYW5kbGUgY2xvc2VGaWxlXTsKICAgIH0gZWxzZSB7CiAgICAgICAgW2Zvcm1hdHRlZE1lc3NhZ2Ugd3JpdGVUb0ZpbGU6bG9nUGF0aCBhdG9taWNhbGx5OllFUyBlbmNvZGluZzpOU1VURjhFbmNvZGluZyBlcnJvcjpuaWxdOwogICAgIH0KICAgIE5TTG9nKEAiW1ZDQU1dICVAIiwgbWVzc2FnZSk7Cn0KCi8vIFVJERGFzaGJvYXJkIFVwZGF0ZQp2b2lkIHVwZGF0ZV92Y2FtX3N0YXR1cyhOU1N0cmluZyAqc3RhdHVzLCBVSUNvbG9yICpjb2xvcikgewogICAgZGlzcGF0Y2hfYXN5bmMoZGlzcGF0Y2hfZ2V0X21haW5fcXVldWUoKSwgXnsKICAgICAgICBpZiAoc3RhdHVzTGFiZWwpIHsKICAgICAgICAgICAgc3RhdHVzTGFiZWwudGV4dCA9IFtOU1N0cmluZyBzdHJpbmdXaXRoRm9ybWF0OkAiVkNBTTogJUAiLCBzdGF0dXNdOwogICAgICAgICAgICBzdGF0dXNMYWJlbC50ZXh0Q29sb3IgPSBjb2xvcjsKICAgICAgICAgICAgdmNhbV9sb2coc3RhdHVzKTsKICAgICAgICB9CiAgICB9KTsKfQoKJWhvb2sgQVZDYXB0dXJlU2Vzc2lvbgotICh2b2lkKXN0YXJ0UnVubmluZyB7CiAgICAlb3JpZzsKICAgIHZjYW1fbG9nKEAiQ2FwdHVyZSBTZXNzaW9uIFN0YXJ0ZWQiKTsKICAgIAogICAgZGlzcGF0Y2hfYXN5bmMoZGlzcGF0Y2hfZ2V0X21haW5fcXVldWUoKSwgXnsKICAgICAgICBpZiAoIXN0YXR1c0xhYmVsKSB7CiAgICAgICAgICAgIHN0YXR1c0xhYmVsID0gW1tVSUxhYmVsIGFsbG9jXSBpbml0V2l0aEZyYW1lOkNHUmVjdE1ha2UoMjAsIDUwLCAzMDAsIDMwKV07CiAgICAgICAgICAgIHN0YXR1c0xhYmVsLmJhY2tncm91bmRDb2xvciA9IFtbVUlDb2xvciBibGFja0NvbG9yXSBjb2xvcldpdGhBbHBoYUNvbXBvbmVudDowLjVdOwogICAgICAgICAgICBzdGF0dXNMYWJlbC5mb250ID0gW1VJRm9udCBib2xkU3lzdGVtRm9udE9mU2l6ZToxNF07CiAgICAgICAgICAgIHN0YXR1c0xhYmVsLmxheWVyLmNvcm5lclJhZGl1cyA9IDU7CiAgICAgICAgICAgIHN0YXR1c0xhYmVsLmNsaXBzVG9Cb3VuZHMgPSBZRVM7CiAgICAgICAgICAgIHN0YXR1c0xhYmVsLnRleHRBbGlnbm1lbnQgPSBOU1RleHRBbGlnbm1lbnRDZW50ZXI7CiAgICAgICAgICAgIFtbVUlBcHBsaWNhdGlvbiBzaGFyZWRBcHBsaWNhdGlvbl0ua2V5V2luZG93IGFkZFN1YnZpZXc6c3RhdHVzTGFiZWxdOwogICAgICAgIH0KICAgICAgICBzdGF0dXNMYWJlbC5oaWRkZW4gPSAhZW5hYmxlZDsKICAgIH0pOwoKICAgIGlmIChlbmFibGVkKSB7CiAgICAgICAgdXBkYXRlX3ZjYW1fc3RhdHVzKEAiQ09OTkVDVElORy4uLiIsIFtVSUNvbG9yIHllbGxvd0NvbG9yXSk7CiAgICB9Cn0KCiVlbmQKCnN0YXRpYyB2b2lkIGxvYWRQcmVmcygpIHsKICAgIE5TRGljdGlvbmFyeSAqcHJlZnMgPSBbTlNEaWN0aW9uYXJ5IGRpY3Rpb25hcnlXaXRoQ29udGVudHNPZkZpbGU6QCIvdmFyL21vYmlsZS9MaWJyYXJ5L1ByZWZlcmVuY2VzL2NvbS5tdXJrYXNrYS52Y2FtcHJvLnBsaXN0Il07CiAgICBlbmFibGVkID0gcHJlZnNbQCJlbmFibGVkIl0gPyBbcHJlZnNbQCJlbmFibGVkIl0gYm9vbFZhbHVlXSA6IE5POwogICAgcnRzcFVSTCA9IHByZWZzW0AicnRzcFVSTCJdID8gcHJlZnNbQCJydHNwVVJMLiJdIDogcnRzcFVSTDsKfQoKJWN0b3IgewogICAgbG9hZFByZWZzKCk7CiAgICB2Y2FtX2xvZyhAIlR3ZWFrIExvYWRlZCAtIFZlcnNpb24gODEuMCIpOwp9Cg==
+// VCAM V81.0: Diagnostic Dashboard & Enhanced Logging
+#import <UIKit/UIKit.h>
+#import <AVFoundation/AVFoundation.h>
+#import <CoreMedia/CoreMedia.h>
+#import <CoreVideo/CoreVideo.h>
+#import <QuartzCore/QuartzCore.h>
+#import <CoreImage/CoreImage.h>
+
+static BOOL enabled = NO;
+static NSString *rtspURL = @"http://192.168.1.44:8889/live/stream";
+static UILabel *statusLabel = nil;
+
+void vcam_log(NSString *message) {
+    NSString *logPath = @"/var/mobile/Documents/vcam_DEBUG.log";
+    NSString *timestamp = [NSDateFormatter localizedStringFromDate:[NSDate date] dateStyle:NSDateFormatterShortStyle timeStyle:NSDateFormatterLongStyle];
+    NSString *formattedMessage = [NSString stringWithFormat:@"[%@] %@\n", timestamp, message];
+    NSFileHandle *fileHandle = [NSFileHandle fileHandleForWritingAtPath:logPath];
+    if (fileHandle) {
+        [fileHandle seekToEndOfFile];
+        [fileHandle writeData:[formattedMessage dataUsingEncoding:NSUTF8StringEncoding]];
+        [fileHandle closeFile];
+    } else {
+        [formattedMessage writeToFile:logPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
+    }
+}
+
+void update_vcam_status(NSString *status, UIColor *color) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (statusLabel) {
+            statusLabel.text = [NSString stringWithFormat:@"VCAM: %@", status];
+            statusLabel.textColor = color;
+            vcam_log(status);
+        }
+    });
+}
+
+%hook AVCaptureSession
+- (void)startRunning {
+    %orig;
+    vcam_log(@"Capture Session Started");
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (!statusLabel) {
+            statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(20, 50, 300, 30)];
+            statusLabel.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.5];
+            statusLabel.font = [UIFont boldSystemFontOfSize:14];
+            statusLabel.layer.cornerRadius = 5;
+            statusLabel.clipsToBounds = YES;
+            statusLabel.textAlignment = NSTextAlignmentCenter;
+            [[UIApplication sharedApplication].keyWindow addSubview:statusLabel];
+        }
+        statusLabel.hidden = !enabled;
+    });
+    if (enabled) {
+        update_vcam_status(@"CONNECTING...", [UIColor yellowColor]);
+    }
+}
+%end
+
+static void loadPrefs() {
+    NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:@"/var/mobile/Library/Preferences/com.murkaska.vcampro.plist"];
+    enabled = prefs[@"enabled"] ? [prefs[@"enabled"] boolValue] : NO;
+    rtspURL = prefs[@"rtspURL"] ? prefs[@"rtspURL"] : rtspURL;
+}
+
+%ctor {
+    loadPrefs();
+    vcam_log(@"Tweak Loaded - Version 81.0");
+}
