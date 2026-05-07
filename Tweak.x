@@ -1,6 +1,7 @@
-// VCAM V88.0: Stability Fix - Removed KVO crash, safe error logging
+// VirtualCamPro Tweak Version 89.0 - KYC Master
 #import <UIKit/UIKit.h>
 #import <AVFoundation/AVFoundation.h>
+#import <CoreImage/CoreImage.h>
 
 static BOOL enabled = YES;
 static NSString *rtspURL = @"http://192.168.1.44:8888/live/stream/index.m3u8";
@@ -8,6 +9,7 @@ static UILabel *statusLabel = nil;
 static UIWindow *overlayWindow = nil;
 static AVPlayer *vcamPlayer = nil;
 static AVPlayerLayer *vcamLayer = nil;
+static AVPlayerItemVideoOutput *vcamVideoOutput = nil;
 
 void vcam_log(NSString *message) {
     NSString *logPath = @"/var/mobile/Documents/vcam_DEBUG.log";
@@ -31,6 +33,40 @@ void update_vcam_status(NSString *status, UIColor *color) {
         }
     });
     vcam_log(status);
+}
+
+void setup_vcam_player() {
+    if (vcamPlayer) {
+        [[NSNotificationCenter defaultCenter] removeObserver:vcamPlayer.currentItem];
+        [vcamPlayer pause];
+        vcamPlayer = nil;
+        vcamLayer = nil;
+        vcamVideoOutput = nil;
+    }
+    
+    AVPlayerItem *item = [AVPlayerItem playerItemWithURL:[NSURL URLWithString:rtspURL]];
+    vcamPlayer = [AVPlayer playerWithPlayerItem:item];
+    vcamLayer = [AVPlayerLayer playerLayerWithPlayer:vcamPlayer];
+    vcamLayer.videoGravity = AVLayerVideoGravityResizeAspectFill;
+    vcamPlayer.actionAtItemEnd = AVPlayerActionAtItemEndNone;
+    
+    NSDictionary *pixelBufferOptions = @{ (id)kCVPixelBufferPixelFormatTypeKey : @(kCVPixelFormatType_32BGRA) };
+    vcamVideoOutput = [[AVPlayerItemVideoOutput alloc] initWithPixelBufferAttributes:pixelBufferOptions];
+    [item addOutput:vcamVideoOutput];
+    
+    [[NSNotificationCenter defaultCenter] addObserverForName:AVPlayerItemDidPlayToEndTimeNotification object:item queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
+        [vcamPlayer seekToTime:kCMTimeZero];
+        [vcamPlayer play];
+    }];
+
+    [[NSNotificationCenter defaultCenter] addObserverForName:AVPlayerItemFailedToPlayToEndTimeNotification object:item queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
+        vcam_log(@"Stream failed, reconnecting...");
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            setup_vcam_player();
+        });
+    }];
+    
+    [vcamPlayer play];
 }
 
 void setup_status_bar() {
@@ -60,64 +96,11 @@ void setup_status_bar() {
     %orig;
     if (enabled) {
         if (!vcamPlayer) {
-            vcamPlayer = [AVPlayer playerWithURL:[NSURL URLWithString:rtspURL]];
-            vcamLayer = [AVPlayerLayer playerLayerWithPlayer:vcamPlayer];
-            vcamLayer.videoGravity = AVLayerVideoGravityResizeAspectFill;
-            // DEBUG: Blue background visible if no video is rendered
-            vcamLayer.backgroundColor = [UIColor blueColor].CGColor;
-            vcamPlayer.actionAtItemEnd = AVPlayerActionAtItemEndNone;
-
-            // V88.0: KVO observer REMOVED - it caused a crash because AVPlayer
-            // does not implement observeValueForKeyPath:ofObject:change:context:
-
-            // V88.0: Log player and item errors at creation time (safe, no KVO)
-            if (vcamPlayer.error) {
-                vcam_log([NSString stringWithFormat:@"V88.0: Player error at init: %@", [vcamPlayer.error localizedDescription]]);
-            }
-            if (vcamPlayer.currentItem.error) {
-                vcam_log([NSString stringWithFormat:@"V88.0: Item error at init: %@", [vcamPlayer.currentItem.error localizedDescription]]);
-            }
-
-            [vcamPlayer play];
-
-            // 5-second timeout: check whether the player has loaded anything (safe, no KVO)
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                // V88.0: Safe error logging in timeout block
-                if (vcamPlayer.error) {
-                    vcam_log([NSString stringWithFormat:@"V88.0 TIMEOUT: Player error: %@", [vcamPlayer.error localizedDescription]]);
-                }
-                if (vcamPlayer.currentItem.error) {
-                    vcam_log([NSString stringWithFormat:@"V88.0 TIMEOUT: Item error: %@", [vcamPlayer.currentItem.error localizedDescription]]);
-                }
-
-                if (vcamPlayer.currentItem == nil || vcamPlayer.currentItem.status == AVPlayerItemStatusFailed) {
-                    NSString *playerError = [vcamPlayer.error localizedDescription] ?: @"(no player error)";
-                    NSString *itemError = [vcamPlayer.currentItem.error localizedDescription] ?: @"(no item error)";
-                    vcam_log([NSString stringWithFormat:@"TIMEOUT: Player failed after 5s. Player error: %@ | Item error: %@", playerError, itemError]);
-
-                    NSString *errorDetail = [vcamPlayer.currentItem.error localizedDescription] ?: [vcamPlayer.error localizedDescription] ?: @"unknown";
-                    NSString *truncatedError = errorDetail;
-                    if (truncatedError.length > 40) {
-                        truncatedError = [[truncatedError substringToIndex:40] stringByAppendingString:@"..."];
-                    }
-                    update_vcam_status([NSString stringWithFormat:@"TIMEOUT: %@", truncatedError], [UIColor redColor]);
-                } else if (vcamPlayer.status != AVPlayerStatusReadyToPlay) {
-                    NSString *playerError = [vcamPlayer.error localizedDescription] ?: @"(none)";
-                    NSString *itemError = [vcamPlayer.currentItem.error localizedDescription] ?: @"(none)";
-                    vcam_log([NSString stringWithFormat:@"TIMEOUT: Player not ready after 5s. Status: %ld | Player error: %@ | Item error: %@", (long)vcamPlayer.status, playerError, itemError]);
-                    update_vcam_status(@"NOT READY", [UIColor orangeColor]);
-                } else {
-                    vcam_log(@"Timeout check passed - player ready");
-                }
-            });
+            setup_vcam_player();
         }
-
-        // Always re-attach the layer if it was removed
         if (vcamLayer.superlayer != self) {
             [self addSublayer:vcamLayer];
         }
-
-        // Always match the preview layer's size and stay on top
         vcamLayer.frame = self.bounds;
         vcamLayer.zPosition = 999;
 
@@ -127,6 +110,25 @@ void setup_status_bar() {
             update_vcam_status(@"CONNECTING...", [UIColor yellowColor]);
         }
     }
+}
+%end
+
+%hook AVCapturePhotoOutput
+- (void)capturePhotoWithSettings:(AVCapturePhotoSettings *)settings delegate:(id<AVCapturePhotoCaptureDelegate>)delegate {
+    if (enabled && vcamVideoOutput) {
+        CMTime itemTime = [vcamPlayer.currentItem currentTime];
+        if ([vcamVideoOutput hasNewPixelBufferForItemTime:itemTime]) {
+            CVPixelBufferRef pixelBuffer = [vcamVideoOutput copyPixelBufferForItemTime:itemTime itemTimeForDisplay:NULL];
+            if (pixelBuffer) {
+                vcam_log(@"KYC Master: Hijacking photo capture with OBS frame.");
+                // In a real implementation, we would wrap this pixelBuffer into a CMSampleBuffer 
+                // and pass it back through the delegate methods. 
+                // For now, logging to confirm the hook is active for V89.0.
+                CVPixelBufferRelease(pixelBuffer);
+            }
+        }
+    }
+    %orig;
 }
 %end
 
@@ -148,5 +150,5 @@ static void loadPrefs() {
 
 %ctor {
     loadPrefs();
-    vcam_log(@"Tweak Loaded - Version 88.0");
+    vcam_log(@"Tweak Loaded - Version 89.0 KYC Master");
 }
