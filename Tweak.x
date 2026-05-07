@@ -1,4 +1,4 @@
-// VCAM V84.0: Full Feature (Stream + UI + Prefs)
+// VCAM V85.0: The Invisible Injection Engine
 #import <UIKit/UIKit.h>
 #import <AVFoundation/AVFoundation.h>
 
@@ -33,54 +33,53 @@ void update_vcam_status(NSString *status, UIColor *color) {
     vcam_log(status);
 }
 
-void setup_vcam_ui() {
-    NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
-    if (!bundleID || ![bundleID hasPrefix:@"com.apple.camera"]) return;
-    
+// SETUP STATUS BAR ONLY (No black screen)
+void setup_status_bar() {
     dispatch_async(dispatch_get_main_queue(), ^{
         if (!overlayWindow) {
-            overlayWindow = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
+            overlayWindow = [[UIWindow alloc] initWithFrame:CGRectMake(0, 0, [UIScreen mainScreen].bounds.size.width, 100)];
             overlayWindow.windowLevel = UIWindowLevelAlert + 1;
             overlayWindow.userInteractionEnabled = NO;
-            overlayWindow.backgroundColor = [UIColor blackColor];
+            overlayWindow.backgroundColor = [UIColor clearColor];
             overlayWindow.hidden = NO;
             
-            vcamPlayer = [AVPlayer playerWithURL:[NSURL URLWithString:rtspURL]];
-            vcamLayer = [AVPlayerLayer playerLayerWithPlayer:vcamPlayer];
-            vcamLayer.frame = overlayWindow.bounds;
-            vcamLayer.videoGravity = AVLayerVideoGravityResizeAspectFill;
-            [overlayWindow.layer addSublayer:vcamLayer];
-            
-            statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(20, 40, 300, 30)];
-            statusLabel.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.7];
+            statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(20, 40, 300, 25)];
+            statusLabel.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.5];
             statusLabel.textColor = [UIColor whiteColor];
-            statusLabel.font = [UIFont boldSystemFontOfSize:14];
-            statusLabel.layer.cornerRadius = 8;
+            statusLabel.font = [UIFont boldSystemFontOfSize:12];
+            statusLabel.layer.cornerRadius = 5;
             statusLabel.clipsToBounds = YES;
             statusLabel.textAlignment = NSTextAlignmentCenter;
-            statusLabel.text = @"VCAM: INITIALIZING...";
             [overlayWindow addSubview:statusLabel];
-            
-            [vcamPlayer play];
         }
         overlayWindow.hidden = !enabled;
-        if (enabled) {
-            update_vcam_status(@"CONNECTING...", [UIColor yellowColor]);
-            // Check if playing
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                if (vcamPlayer.status == AVPlayerStatusReadyToPlay) {
-                    update_vcam_status(@"STREAMING ACTIVE", [UIColor greenColor]);
-                }
-            });
-        }
     });
 }
+
+%hook AVCaptureVideoPreviewLayer
+- (void)setSession:(AVCaptureSession *)session {
+    %orig;
+    if (enabled) {
+        if (!vcamPlayer) {
+            vcamPlayer = [AVPlayer playerWithURL:[NSURL URLWithString:rtspURL]];
+            vcamLayer = [AVPlayerLayer playerLayerWithPlayer:vcamPlayer];
+            vcamLayer.videoGravity = AVLayerVideoGravityResizeAspectFill;
+            vcamPlayer.actionAtItemEnd = AVPlayerActionAtItemEndNone;
+        }
+        vcamLayer.frame = self.bounds;
+        [self addSublayer:vcamLayer];
+        [vcamPlayer play];
+        update_vcam_status(@"STREAMING ACTIVE", [UIColor greenColor]);
+    }
+}
+%end
 
 %hook AVCaptureSession
 - (void)startRunning {
     %orig;
     vcam_log(@"Capture Session Started");
-    setup_vcam_ui();
+    setup_status_bar();
+    update_vcam_status(@"CONNECTING...", [UIColor yellowColor]);
 }
 %end
 
@@ -94,5 +93,5 @@ static void loadPrefs() {
 
 %ctor {
     loadPrefs();
-    vcam_log(@"Tweak Loaded - Version 84.0");
+    vcam_log(@"Tweak Loaded - Version 85.0");
 }
