@@ -150,13 +150,17 @@ static BOOL is_front_camera_active(AVCaptureVideoPreviewLayer *previewLayer) {
 }
 
 static void setup_vcam_player_with_url(NSString *url);
-static void on_fallback_timer(void) {
-    if (usingFallback) return;
-    if (vcamPlayer.currentItem.status == AVPlayerItemStatusReadyToPlay) return;
-    usingFallback = YES;
-    NSString *fb = [rtspURL stringByReplacingOccurrencesOfString:@"/index.m3u8" withString:@""];
-    vcam_log([NSString stringWithFormat:@"V92: HLS timeout, falling back to MJPEG"]);
-    setup_vcam_player_with_url(fb);
+
+static void start_fallback_timer(void) {
+    [fallbackTimer invalidate];
+    fallbackTimer = [NSTimer scheduledTimerWithTimeInterval:5.0 repeats:NO block:^(NSTimer *timer) {
+        if (usingFallback) return;
+        if (vcamPlayer.currentItem.status == AVPlayerItemStatusReadyToPlay) return;
+        usingFallback = YES;
+        NSString *fb = [rtspURL stringByReplacingOccurrencesOfString:@"/index.m3u8" withString:@""];
+        vcam_log(@"V92: HLS timeout, falling back to MJPEG");
+        setup_vcam_player_with_url(fb);
+    }];
 }
 
 static void setup_vcam_player_with_url(NSString *url) {
@@ -174,6 +178,7 @@ static void setup_vcam_player_with_url(NSString *url) {
     vcamLayer.videoGravity = AVLayerVideoGravityResizeAspectFill;
     [vcamPlayer play];
     start_grabbing();
+    if (!usingFallback) start_fallback_timer();
 }
 
 static void setup_vcam_player(void) {
