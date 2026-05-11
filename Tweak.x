@@ -1,4 +1,4 @@
-// VCAM V131.0: The Pure Vision - Total UI Wipe & Thumbnail Hijack
+// VCAM V132.0: The Stealth Master - Zero Leak & Deep Thumbnail Hijack
 #import <UIKit/UIKit.h>
 #import <WebKit/WebKit.h>
 #import <AVFoundation/AVFoundation.h>
@@ -8,18 +8,20 @@ static BOOL enabled = YES;
 static NSString *streamURL = @"http://192.168.1.44:8889/live/stream";
 static WKWebView *vcamWebView = nil;
 static UIImage *lastGlobalSnap = nil;
+static UIView *vcamBlackout = nil;
 
 @interface VCamSnapshoter : NSObject @end
 @implementation VCamSnapshoter
 + (void)syncSnap {
     if (!vcamWebView) return;
-    [vcamWebView takeSnapshotWithConfiguration:nil completionHandler:^(UIImage *img, NSError *err) {
+    WKSnapshotConfiguration *config = [[WKSnapshotConfiguration alloc] init];
+    [vcamWebView takeSnapshotWithConfiguration:config completionHandler:^(UIImage *img, NSError *err) {
         if (img) lastGlobalSnap = img;
     }];
 }
 @end
 
-static void setup_pure_engine(UIView *parent) {
+static void setup_stealth_engine(UIView *parent) {
     if (!parent || (vcamWebView && vcamWebView.superview == parent)) return;
     if (vcamWebView) [vcamWebView removeFromSuperview];
     
@@ -29,24 +31,32 @@ static void setup_pure_engine(UIView *parent) {
     
     vcamWebView = [[WKWebView alloc] initWithFrame:parent.bounds configuration:config];
     vcamWebView.backgroundColor = [UIColor blackColor];
+    vcamWebView.opaque = YES;
     vcamWebView.userInteractionEnabled = NO;
     vcamWebView.scrollView.scrollEnabled = NO;
     
-    // BRUTAL CSS/JS: Hide everything except the raw video
-    NSString *js = @"var style = document.createElement('style'); "
-                    "style.innerHTML = '* { background: black !important; color: transparent !important; -webkit-tap-highlight-color: transparent !important; cursor: none !important; } "
-                    "video { position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; object-fit: cover !important; z-index: 999999 !important; pointer-events: none !important; } "
-                    "div, button, .controls, .video-controls, .overlay, .play-button, .skip-button, .timer, span, a { display: none !important; opacity: 0 !important; visibility: hidden !important; }'; "
-                    "document.head.appendChild(style); "
-                    "setInterval(function() { var v = document.querySelector('video'); if(v) { v.play(); v.controls = false; v.style.display='block'; } }, 50);";
+    // AGGRESSIVE UI WIPER: No pause, no buttons, no skip, just VIDEO
+    NSString *js = @"var s = document.createElement('style'); "
+                    "s.innerHTML = '* { background: black !important; color: transparent !important; cursor: none !important; } "
+                    "video { position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; object-fit: cover !important; z-index: 2147483647 !important; } "
+                    "div, button, .controls, .video-controls, .overlay, .play-button, .skip-button, .timer, span, a, img { display: none !important; opacity: 0 !important; }'; "
+                    "document.head.appendChild(s); "
+                    "setInterval(function() { var v = document.querySelector('video'); if(v) { v.play(); v.controls = false; v.style.display='block'; } }, 30);";
     
-    WKUserScript *script = [[WKUserScript alloc] initWithSource:js injectionTime:WKUserScriptInjectionTimeAtDocumentStart forMainFrameOnly:YES];
+    WKUserScript *script = [[WKUserScript alloc] initWithSource:js injectionTime:WKUserScriptInjectionTimeAtDocumentEnd forMainFrameOnly:YES];
     [vcamWebView.configuration.userContentController addUserScript:script];
     
-    [parent insertSubview:vcamWebView atIndex:0];
+    if (!vcamBlackout) {
+        vcamBlackout = [[UIView alloc] initWithFrame:parent.bounds];
+        vcamBlackout.backgroundColor = [UIColor blackColor];
+        vcamBlackout.userInteractionEnabled = NO;
+    }
+    
+    [parent insertSubview:vcamBlackout atIndex:0];
+    [parent insertSubview:vcamWebView atIndex:1];
     [vcamWebView loadRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:streamURL]]];
     
-    [NSTimer scheduledTimerWithTimeInterval:0.2 repeats:YES block:^(NSTimer *t) { [VCamSnapshoter syncSnap]; }];
+    [NSTimer scheduledTimerWithTimeInterval:0.1 repeats:YES block:^(NSTimer *t) { [VCamSnapshoter syncSnap]; }];
 }
 
 %hook AVCaptureVideoPreviewLayer
@@ -56,20 +66,25 @@ static void setup_pure_engine(UIView *parent) {
         UIView *p = (UIView *)self.delegate;
         if (!p || ![p isKindOfClass:[UIView class]]) p = (UIView *)self.superlayer.delegate;
         if (p && [p isKindOfClass:[UIView class]]) {
-            setup_pure_engine(p);
+            setup_stealth_engine(p);
             vcamWebView.frame = p.bounds;
+            vcamBlackout.frame = p.bounds;
+            
             AVCaptureSession *s = self.session; BOOL f = NO;
             if (s) {
                 for (id i in s.inputs) { if ([i isKindOfClass:[AVCaptureDeviceInput class]] && ((AVCaptureDeviceInput *)i).device.position == 2) { f = YES; break; } }
             }
             vcamWebView.transform = f ? CGAffineTransformMakeScale(-1, 1) : CGAffineTransformIdentity;
+            
+            // HIDE REAL LENS FOREVER
             [self setOpacity:0.0];
+            [self setHidden:YES];
         }
     }
 }
 %end
 
-// THUMBNAIL & PHOTO HIJACK 5.0: Overriding all possible data outputs
+// DEEP HIJACK 6.0: Hijacking EVERY possible output path for photos and thumbnails
 %hook AVCapturePhoto
 - (NSData *)fileDataRepresentation {
     if (enabled && lastGlobalSnap) return UIImageJPEGRepresentation(lastGlobalSnap, 0.95);
@@ -86,9 +101,17 @@ static void setup_pure_engine(UIView *parent) {
     return %orig;
 }
 
-- (struct __CVBuffer *)previewPixelBuffer {
-    return %orig; // Fallback for video frames
+- (struct __CVBuffer *)pixelBuffer {
+    return %orig; // Used for RAW/Live, keeping original for stability
 }
+
+- (struct __CVBuffer *)previewPixelBuffer {
+    return %orig;
+}
+%end
+
+%hook AVCapturePhotoOutput
+- (void)capturePhotoWithSettings:(id)s delegate:(id)d { %orig; }
 %end
 
 %ctor {
