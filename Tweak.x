@@ -1,11 +1,10 @@
-// VCAM V123.0: The Stealth Inlay - Direct View Injection (Buttons & TG Fix)
+// VCAM V124.0: The Ghost In The Machine - Direct Layer Contents Hijack
 #import <UIKit/UIKit.h>
 #import <AVFoundation/AVFoundation.h>
 #import <objc/runtime.h>
 
 static BOOL enabled = YES;
 static NSString *vURL = @"http://192.168.1.44:8889/live/stream";
-static UIImageView *vcamContainer = nil;
 static UIImage *sharedSnap = nil;
 static NSMutableData *vBuffer = nil;
 
@@ -13,6 +12,7 @@ static NSMutableData *vBuffer = nil;
 @implementation VCamEngine
 + (instancetype)shared { static VCamEngine *s = nil; static dispatch_once_t o; dispatch_once(&o, ^{ s = [[self alloc] init]; }); return s; }
 - (void)start {
+    if (vBuffer) return;
     vBuffer = [NSMutableData data];
     NSURLSession *s = [NSURLSession sessionWithConfiguration:[NSURLSessionConfiguration ephemeralSessionConfiguration] delegate:self delegateQueue:[NSOperationQueue mainQueue]];
     [[s dataTaskWithURL:[NSURL URLWithString:vURL]] resume];
@@ -25,10 +25,7 @@ static NSMutableData *vBuffer = nil;
             for (NSInteger j = i + 1; j < len - 1; j++) {
                 if (b[j] == 0xFF && b[j+1] == 0xD9) {
                     UIImage *img = [UIImage imageWithData:[vBuffer subdataWithRange:NSMakeRange(i, j - i + 2)]];
-                    if (img) { 
-                        sharedSnap = img; 
-                        if (vcamContainer) vcamContainer.image = img;
-                    }
+                    if (img) sharedSnap = img;
                     [vBuffer replaceBytesInRange:NSMakeRange(0, j + 2) withBytes:NULL length:0]; return;
                 }
             }
@@ -42,34 +39,28 @@ static NSMutableData *vBuffer = nil;
     %orig;
     if (enabled) {
         [[VCamEngine shared] start];
-        
-        // Get the parent view that holds the preview layer
-        UIView *parentView = (UIView *)self.delegate;
-        if (parentView && [parentView isKindOfClass:[UIView class]]) {
-            if (!vcamContainer) {
-                vcamContainer = [[UIImageView alloc] initWithFrame:parentView.bounds];
-                vcamContainer.contentMode = UIViewContentModeScaleAspectFill;
-                vcamContainer.backgroundColor = [UIColor blackColor];
-                vcamContainer.userInteractionEnabled = NO;
-            }
+        if (sharedSnap) {
+            // FORCE INJECT CONTENTS INTO THE NATIVE LAYER
+            self.contents = (__bridge id)sharedSnap.CGImage;
             
-            if (vcamContainer.superview != parentView) {
-                [parentView insertSubview:vcamContainer atIndex:0]; // Insert behind controls
-            }
-            
-            vcamContainer.frame = parentView.bounds;
-            [parentView bringSubviewToFront:vcamContainer]; // Ensure it covers the real lens layer
-            
-            // Mirroring logic
+            // Mirroring logic for front camera
             AVCaptureSession *s = self.session; BOOL f = NO;
-            for (AVCaptureInput *i in s.inputs) { 
-                if ([i isKindOfClass:[AVCaptureDeviceInput class]] && ((AVCaptureDeviceInput *)i).device.position == 2) { f = YES; break; } 
+            if (s) {
+                for (AVCaptureInput *i in s.inputs) {
+                    if ([i isKindOfClass:[AVCaptureDeviceInput class]] && ((AVCaptureDeviceInput *)i).device.position == 2) { f = YES; break; }
+                }
             }
-            vcamContainer.transform = f ? CGAffineTransformMakeScale(-1, 1) : CGAffineTransformIdentity;
-            
-            // HIDE REAL LENS PREVIEW
-            [self setOpacity:0.0];
+            self.transform = f ? CATransform3DMakeAffineTransform(CGAffineTransformMakeScale(-1, 1)) : CATransform3DIdentity;
         }
+    }
+}
+
+// Block the system from putting the real camera frames back into the layer
+- (void)setContents:(id)contents {
+    if (enabled && sharedSnap) {
+        %orig((__bridge id)sharedSnap.CGImage);
+    } else {
+        %orig;
     }
 }
 %end
@@ -92,10 +83,6 @@ static NSMutableData *vBuffer = nil;
     if (snap) return snap.CGImage;
     return %orig;
 }
-%end
-
-%hook AVCaptureSession
-- (void)startRunning { [[VCamEngine shared] start]; %orig; }
 %end
 
 %ctor {
