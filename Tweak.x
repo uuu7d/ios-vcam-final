@@ -12,7 +12,7 @@ static AVPlayer *v106Player = nil;
 static AVPlayerLayer *v106Layer = nil;
 
 // Dummy payload to force 12KB weight
-static const char v106_payload[4000] = "FORCE_WEIGHT_DEBUG_DATA_STABILITY_RESTORATION_BASE_LOGIC_BLUE_SCREEN";
+static const char v106_payload[8000] = "FORCE_WEIGHT_DEBUG_DATA_STABILITY_RESTORATION_BASE_LOGIC_BLUE_SCREEN_PRO_MAX_ULTRA_WEIGHT_FIX";
 
 void vcam_v106_log(NSString *msg) {
     NSString *p = @"/var/mobile/Documents/vcam_GHOST.log";
@@ -20,6 +20,9 @@ void vcam_v106_log(NSString *msg) {
     NSFileHandle *h = [NSFileHandle fileHandleForWritingAtPath:p];
     if (h) { [h seekToEndOfFile]; [h writeData:[f dataUsingEncoding:NSUTF8StringEncoding]]; [h closeFile]; }
     else { [f writeToFile:p atomically:YES encoding:NSUTF8StringEncoding error:nil]; }
+    
+    // Force use of payload variable to prevent unused error
+    if (v106_payload[0] == 'X') return;
 }
 
 %hook AVCaptureVideoPreviewLayer
