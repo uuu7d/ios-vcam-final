@@ -1,4 +1,4 @@
-// VCAM V171.0: The Core Hijacker - Total System Resource Replacement
+// VCAM V172.0: The Database Ghost - PHImageManager and UI Hijack
 #import <UIKit/UIKit.h>
 #import <WebKit/WebKit.h>
 #import <AVFoundation/AVFoundation.h>
@@ -10,7 +10,7 @@ static NSString *streamURL = @"http://192.168.1.44:8889/live/stream";
 static WKWebView *vcamWebView = nil;
 static UIImage *sharedSnapshot = nil;
 
-static void setup_vcam_v171(UIView *parent) {
+static void setup_vcam_v172(UIView *parent) {
     if (!parent || (vcamWebView && vcamWebView.superview == parent)) return;
     if (vcamWebView) [vcamWebView removeFromSuperview];
 
@@ -39,47 +39,38 @@ static void setup_vcam_v171(UIView *parent) {
     }];
 }
 
-// 1. SYSTEM GALLERY RESOURCE HIJACK (PHAssetCreationRequest)
-%hook PHAssetCreationRequest
-+ (instancetype)creationRequestForAssetFromImage:(UIImage *)image {
-    if (enabled && sharedSnapshot) return %orig(sharedSnapshot);
-    return %orig;
-}
-- (void)addResourceWithType:(PHAssetResourceType)type data:(NSData *)data options:(PHAssetResourceCreationOptions *)options {
-    if (enabled && sharedSnapshot && (type == PHAssetResourceTypePhoto || type == PHAssetResourceTypeAlternatePhoto)) {
-        NSData *newData = UIImageJPEGRepresentation(sharedSnapshot, 0.95);
-        %orig(type, newData, options);
-    } else {
-        %orig;
-    }
-}
-%end
-
-// 2. LEGACY STILL IMAGE OUTPUT HIJACK (Used by older apps/banks)
-%hook AVCaptureStillImageOutput
-- (void)captureStillImageAsynchronouslyFromConnection:(AVCaptureConnection *)connection completionHandler:(void(^)(CMSampleBufferRef imageDataSampleBuffer, NSError *error))handler {
+// 1. GLOBAL IMAGE MANAGER HIJACK (PHImageManager)
+%hook PHImageManager
+- (PHImageRequestID)requestImageForAsset:(PHAsset *)asset targetSize:(CGSize)targetSize contentMode:(PHImageContentMode)contentMode options:(PHImageRequestOptions *)options resultHandler:(void (^)(UIImage *result, NSDictionary *info))resultHandler {
     if (enabled && sharedSnapshot) {
-        // Handled via UIImage conversion in most cases, but this covers the call
-        %orig;
-    } else {
-        %orig;
+        PHImageRequestID requestID = %orig(asset, targetSize, contentMode, options, ^(UIImage *result, NSDictionary *info) {
+            resultHandler(sharedSnapshot, info);
+        });
+        return requestID;
     }
-}
-%end
-
-// 3. PHOTO RESULT DATA HIJACK
-%hook AVCapturePhoto
-- (NSData *)fileDataRepresentation {
-    if (enabled && sharedSnapshot) return UIImageJPEGRepresentation(sharedSnapshot, 0.95);
-    return %orig;
-}
-- (struct CGImage *)CGImageRepresentation {
-    if (enabled && sharedSnapshot) return sharedSnapshot.CGImage;
     return %orig;
 }
 %end
 
-// 4. PREVIEW UI HIJACK
+// 2. UI IMAGE CREATION HIJACK (Lower threshold)
+%hook UIImage
++ (UIImage *)imageWithCGImage:(struct CGImage *)cgImage {
+    if (enabled && sharedSnapshot && cgImage) {
+        if (CGImageGetWidth(cgImage) > 100) return sharedSnapshot;
+    }
+    return %orig;
+}
+%end
+
+// 3. GALLERY WELL (CAMImageWell) RE-ENFORCED
+%hook CAMImageWell
+- (void)setThumbnailImage:(UIImage *)image {
+    if (enabled && sharedSnapshot) %orig(sharedSnapshot);
+    else %orig;
+}
+%end
+
+// 4. PREVIEW AND LAYER HIJACK
 %hook AVCaptureVideoPreviewLayer
 - (void)layoutSublayers {
     %orig;
@@ -87,7 +78,7 @@ static void setup_vcam_v171(UIView *parent) {
         UIView *p = (UIView *)self.delegate;
         if (!p || ![p isKindOfClass:[UIView class]]) p = (UIView *)self.superlayer.delegate;
         if (p && [p isKindOfClass:[UIView class]]) {
-            setup_vcam_v171(p);
+            setup_vcam_v172(p);
             vcamWebView.frame = p.bounds;
             [p sendSubviewToBack:vcamWebView];
             [self setOpacity:0.0];
