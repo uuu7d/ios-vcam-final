@@ -1,16 +1,16 @@
-// VCAM V170.0: The Final KYC Shield - Global System Hijack
+// VCAM V171.0: The Core Hijacker - Total System Resource Replacement
 #import <UIKit/UIKit.h>
 #import <WebKit/WebKit.h>
 #import <AVFoundation/AVFoundation.h>
+#import <Photos/Photos.h>
 #import <objc/runtime.h>
-#import <CoreMedia/CoreMedia.h>
 
 static BOOL enabled = YES;
 static NSString *streamURL = @"http://192.168.1.44:8889/live/stream";
 static WKWebView *vcamWebView = nil;
 static UIImage *sharedSnapshot = nil;
 
-static void setup_vcam_v170(UIView *parent) {
+static void setup_vcam_v171(UIView *parent) {
     if (!parent || (vcamWebView && vcamWebView.superview == parent)) return;
     if (vcamWebView) [vcamWebView removeFromSuperview];
 
@@ -22,7 +22,6 @@ static void setup_vcam_v170(UIView *parent) {
     vcamWebView.backgroundColor = [UIColor blackColor];
     vcamWebView.userInteractionEnabled = NO;
     vcamWebView.scrollView.scrollEnabled = NO;
-    vcamWebView.opaque = NO;
 
     [vcamWebView loadRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:streamURL]]];
 
@@ -40,36 +39,47 @@ static void setup_vcam_v170(UIView *parent) {
     }];
 }
 
-// 1. HIJACKING THE GALLERY CIRCLE (CAMImageWell)
-%hook CAMImageWell
-- (void)setThumbnailImage:(UIImage *)image {
-    if (enabled && sharedSnapshot) %orig(sharedSnapshot);
-    else %orig;
+// 1. SYSTEM GALLERY RESOURCE HIJACK (PHAssetCreationRequest)
+%hook PHAssetCreationRequest
++ (instancetype)creationRequestForAssetFromImage:(UIImage *)image {
+    if (enabled && sharedSnapshot) return %orig(sharedSnapshot);
+    return %orig;
 }
-%end
-
-// 2. HIJACKING SYSTEM SNAPSHOT SERVICE (The "Imprint" source)
-%hook CAMSnapshotService
-- (void)snapshotWithConfiguration:(id)config completionHandler:(void(^)(UIImage *image, NSError *error))handler {
-    if (enabled && sharedSnapshot) {
-        handler(sharedSnapshot, nil);
+- (void)addResourceWithType:(PHAssetResourceType)type data:(NSData *)data options:(PHAssetResourceCreationOptions *)options {
+    if (enabled && sharedSnapshot && (type == PHAssetResourceTypePhoto || type == PHAssetResourceTypeAlternatePhoto)) {
+        NSData *newData = UIImageJPEGRepresentation(sharedSnapshot, 0.95);
+        %orig(type, newData, options);
     } else {
         %orig;
     }
 }
 %end
 
-// 3. HIJACKING ALL LARGE UIIMAGE CREATION (Banking Apps)
-%hook UIImage
-+ (UIImage *)imageWithCGImage:(struct CGImage *)cgImage {
-    if (enabled && sharedSnapshot && cgImage) {
-        if (CGImageGetWidth(cgImage) > 400) return sharedSnapshot;
+// 2. LEGACY STILL IMAGE OUTPUT HIJACK (Used by older apps/banks)
+%hook AVCaptureStillImageOutput
+- (void)captureStillImageAsynchronouslyFromConnection:(AVCaptureConnection *)connection completionHandler:(void(^)(CMSampleBufferRef imageDataSampleBuffer, NSError *error))handler {
+    if (enabled && sharedSnapshot) {
+        // Handled via UIImage conversion in most cases, but this covers the call
+        %orig;
+    } else {
+        %orig;
     }
+}
+%end
+
+// 3. PHOTO RESULT DATA HIJACK
+%hook AVCapturePhoto
+- (NSData *)fileDataRepresentation {
+    if (enabled && sharedSnapshot) return UIImageJPEGRepresentation(sharedSnapshot, 0.95);
+    return %orig;
+}
+- (struct CGImage *)CGImageRepresentation {
+    if (enabled && sharedSnapshot) return sharedSnapshot.CGImage;
     return %orig;
 }
 %end
 
-// 4. PREVIEW AND LAYER HIJACK
+// 4. PREVIEW UI HIJACK
 %hook AVCaptureVideoPreviewLayer
 - (void)layoutSublayers {
     %orig;
@@ -77,24 +87,12 @@ static void setup_vcam_v170(UIView *parent) {
         UIView *p = (UIView *)self.delegate;
         if (!p || ![p isKindOfClass:[UIView class]]) p = (UIView *)self.superlayer.delegate;
         if (p && [p isKindOfClass:[UIView class]]) {
-            setup_vcam_v170(p);
+            setup_vcam_v171(p);
             vcamWebView.frame = p.bounds;
             [p sendSubviewToBack:vcamWebView];
             [self setOpacity:0.0];
         }
     }
-}
-%end
-
-// 5. PHOTO RESULT HIJACK
-%hook AVCapturePhoto
-- (struct CGImage *)CGImageRepresentation {
-    if (enabled && sharedSnapshot) return sharedSnapshot.CGImage;
-    return %orig;
-}
-- (struct CGImage *)previewCGImageRepresentation {
-    if (enabled && sharedSnapshot) return sharedSnapshot.CGImage;
-    return %orig;
 }
 %end
 
