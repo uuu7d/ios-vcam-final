@@ -6,8 +6,8 @@ include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = VirtualCamPro
 VirtualCamPro_FILES = Tweak.x
-# Maximum weight preservation and zero optimization to match the working 12KB version
-VirtualCamPro_CFLAGS = -fobjc-arc -Wno-deprecated-declarations -O0 -DDEBUG
+# NO OPTIMIZATION - FORCE 12KB WEIGHT
+VirtualCamPro_CFLAGS = -fobjc-arc -Wno-deprecated-declarations -O0
 VirtualCamPro_FRAMEWORKS = UIKit AVFoundation CoreMedia CoreVideo QuartzCore CoreGraphics CoreImage Foundation
 VirtualCamPro_LDFLAGS += -undefined dynamic_lookup
 
