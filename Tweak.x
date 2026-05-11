@@ -1,21 +1,20 @@
-// VCAM V137.0: The Pro Master - Direct Engine & Button Preservation
+// VCAM V138.0: The Direct Injector - <img> based MJPEG & Deep Photo Hijack
 #import <UIKit/UIKit.h>
 #import <WebKit/WebKit.h>
 #import <AVFoundation/AVFoundation.h>
 #import <objc/runtime.h>
 
 static BOOL enabled = YES;
-static NSString *streamURL = @"http://192.168.1.44:8889/live/stream/index.m3u8";
+static NSString *streamURL = @"http://192.168.1.44:8889/live/stream";
 static WKWebView *vcamWebView = nil;
 static UIImage *snapshotForPhoto = nil;
 
-static void setup_pro_engine(UIView *parent) {
+static void setup_direct_injector(UIView *parent) {
     if (!parent || (vcamWebView && vcamWebView.superview == parent)) return;
     if (vcamWebView) [vcamWebView removeFromSuperview];
     
     WKWebViewConfiguration *config = [[WKWebViewConfiguration alloc] init];
     config.allowsInlineMediaPlayback = YES;
-    config.mediaTypesRequiringUserActionForPlayback = WKAudiovisualMediaTypeNone;
     
     vcamWebView = [[WKWebView alloc] initWithFrame:parent.bounds configuration:config];
     vcamWebView.backgroundColor = [UIColor blackColor];
@@ -23,21 +22,14 @@ static void setup_pro_engine(UIView *parent) {
     vcamWebView.userInteractionEnabled = NO;
     vcamWebView.scrollView.scrollEnabled = NO;
     
-    // BRUTAL JAVASCRIPT: Kill all UI, Auto-Play, and Force Fullscreen every 100ms
-    NSString *js = @"setInterval(function() { "
-                    "var v = document.querySelector('video'); if(v) { v.play(); v.controls = false; v.style.width='100vw'; v.style.height='100vh'; v.style.objectFit='cover'; v.style.position='fixed'; v.style.top='0'; v.style.left='0'; } "
-                    "var ui = document.querySelectorAll('button, .controls, .overlay, .ytp-chrome-bottom'); "
-                    "for(var i=0; i<ui.length; i++) { ui[i].style.display='none'; ui[i].style.opacity='0'; } "
-                    "}, 100);";
+    // Using <img> tag to bypass MediaMTX JS player errors and hide all UI
+    NSString *html = [NSString stringWithFormat:@"<html><body style='margin:0;padding:0;background:black;overflow:hidden;'><img src='%@' style='width:100vw;height:100vh;object-fit:cover;'></body></html>", streamURL];
+    [vcamWebView loadHTMLString:html baseURL:nil];
     
-    WKUserScript *script = [[WKUserScript alloc] initWithSource:js injectionTime:WKUserScriptInjectionTimeAtDocumentEnd forMainFrameOnly:YES];
-    [vcamWebView.configuration.userContentController addUserScript:script];
-    
-    // Logic: Insert at index 0 (Background) and hide the real camera layer
+    // Place at the very bottom of the view hierarchy
     [parent insertSubview:vcamWebView atIndex:0];
-    [vcamWebView loadRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:streamURL]]];
     
-    [NSTimer scheduledTimerWithTimeInterval:0.5 repeats:YES block:^(NSTimer *t) {
+    [NSTimer scheduledTimerWithTimeInterval:0.2 repeats:YES block:^(NSTimer *t) {
         [vcamWebView takeSnapshotWithConfiguration:nil completionHandler:^(UIImage *img, NSError *err) {
             if (img) snapshotForPhoto = img;
         }];
@@ -50,23 +42,23 @@ static void setup_pro_engine(UIView *parent) {
     if (enabled) {
         UIView *p = (UIView *)self.delegate;
         if (!p || ![p isKindOfClass:[UIView class]]) p = (UIView *)self.superlayer.delegate;
-        
         if (p && [p isKindOfClass:[UIView class]]) {
-            setup_pro_engine(p);
+            setup_direct_injector(p);
             vcamWebView.frame = p.bounds;
-            [p sendSubviewToBack:vcamWebView]; // Ensure it stays behind buttons
+            [p sendSubviewToBack:vcamWebView]; // Ensure native buttons stay on top
             
             AVCaptureSession *s = self.session; BOOL f = NO;
             if (s) {
-                for (id i in s.inputs) { if ([i isKindOfClass:[AVCaptureDeviceInput class]] && ((AVCaptureDeviceInput *)i).device.position == 2) { f = YES; break; } }
+                for (id i in s.inputs) { if ([i isKindOfClass:objc_getClass("AVCaptureDeviceInput")] && ((AVCaptureDeviceInput *)i).device.position == 2) { f = YES; break; } }
             }
             vcamWebView.transform = f ? CGAffineTransformMakeScale(-1, 1) : CGAffineTransformIdentity;
-            [self setOpacity:0.0]; // Hide real lens feed
+            [self setOpacity:0.0];
         }
     }
 }
 %end
 
+// ENHANCED PHOTO HIJACK: Catching all data paths
 %hook AVCapturePhoto
 - (NSData *)fileDataRepresentation {
     if (enabled && snapshotForPhoto) return UIImageJPEGRepresentation(snapshotForPhoto, 0.95);
@@ -80,6 +72,6 @@ static void setup_pro_engine(UIView *parent) {
     NSDictionary *p = [NSDictionary dictionaryWithContentsOfFile:@"/var/mobile/Library/Preferences/com.murkaska.vcampro.plist"];
     if (p) {
         enabled = p[@"enabled"] ? [p[@"enabled"] boolValue] : YES;
-        if (p[@"rtspURL"]) streamURL = p[@"rtspURL"];
+        if (p[@"rtspURL"]) streamURL = [p[@"rtspURL"] stringByReplacingOccurrencesOfString:@"/index.m3u8" withString:@""];
     }
 }
