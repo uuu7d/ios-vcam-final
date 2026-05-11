@@ -1,4 +1,4 @@
-// VCAM V99.0: Blue Screen Hero - Pure Original Logic Restoration
+// VCAM V100.0: The Century Fix - Static Hybrid Engine & Full Restoration
 #import <UIKit/UIKit.h>
 #import <AVFoundation/AVFoundation.h>
 #import <CoreImage/CoreImage.h>
@@ -14,9 +14,10 @@ static AVPlayer *vcamPlayer = nil;
 static AVPlayerLayer *vcamLayer = nil;
 static AVPlayerItemVideoOutput *vcamVideoOutput = nil;
 static UIImage *lastValidUIImage = nil;
+static CADisplayLink *globalLink = nil;
 
 void vcam_log(NSString *message) {
-    NSString *logPath = @"/var/mobile/Documents/vcam_ORIGINAL.log";
+    NSString *logPath = @"/var/mobile/Documents/vcam_CENTURY.log";
     NSString *formatted = [NSString stringWithFormat:@"%@\n", message];
     NSFileHandle *fh = [NSFileHandle fileHandleForWritingAtPath:logPath];
     if (fh) { [fh seekToEndOfFile]; [fh writeData:[formatted dataUsingEncoding:NSUTF8StringEncoding]]; [fh closeFile]; }
@@ -25,7 +26,7 @@ void vcam_log(NSString *message) {
 
 void update_vcam_status(NSString *status, UIColor *color) {
     dispatch_async(dispatch_get_main_queue(), ^{
-        if (statusLabel) { statusLabel.text = [NSString stringWithFormat:@"VCAM ORIGINAL: %@", status]; statusLabel.textColor = color; }
+        if (statusLabel) { statusLabel.text = [NSString stringWithFormat:@"VCAM 100: %@", status]; statusLabel.textColor = color; }
     });
 }
 
@@ -38,9 +39,9 @@ void setup_status_bar(void) {
         overlayWindow.backgroundColor = [UIColor clearColor];
         overlayWindow.hidden = NO;
         statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 40, [UIScreen mainScreen].bounds.size.width - 20, 25)];
-        statusLabel.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.6];
+        statusLabel.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.7];
         statusLabel.textColor = [UIColor whiteColor];
-        statusLabel.font = [UIFont boldSystemFontOfSize:11];
+        statusLabel.font = [UIFont boldSystemFontOfSize:10];
         statusLabel.layer.cornerRadius = 6;
         statusLabel.clipsToBounds = YES;
         statusLabel.textAlignment = NSTextAlignmentCenter;
@@ -48,8 +49,8 @@ void setup_status_bar(void) {
     });
 }
 
-@interface VCamEngine : NSObject + (void)tick; @end
-@implementation VCamEngine
+@interface VCamCenturyEngine : NSObject + (void)tick; @end
+@implementation VCamCenturyEngine
 + (void)tick {
     if (!vcamVideoOutput || !vcamPlayer.currentItem) return;
     CMTime t = [vcamPlayer.currentItem currentTime];
@@ -69,17 +70,26 @@ void setup_status_bar(void) {
 static void setup_player(NSString *u) {
     if (vcamPlayer) { [vcamPlayer pause]; [vcamLayer removeFromSuperlayer]; vcamPlayer = nil; vcamLayer = nil; }
     NSURL *url = [NSURL URLWithString:u];
-    AVPlayerItem *item = [AVPlayerItem playerItemWithURL:url];
+    update_vcam_status([NSString stringWithFormat:@"CENTURY CONN [%@]...", url.host], [UIColor yellowColor]);
+    
+    AVURLAsset *asset = [AVURLAsset URLAssetWithURL:url options:@{AVURLAssetPreferPreciseDurationAndTimingKey: @YES}];
+    AVPlayerItem *item = [AVPlayerItem playerItemWithAsset:asset];
     vcamVideoOutput = [[AVPlayerItemVideoOutput alloc] initWithPixelBufferAttributes:@{(id)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA)}];
     [item addOutput:vcamVideoOutput];
+    
     vcamPlayer = [AVPlayer playerWithPlayerItem:item];
+    vcamPlayer.automaticallyWaitsToMinimizeStalling = NO;
     vcamPlayer.actionAtItemEnd = AVPlayerActionAtItemEndNone;
+    
     vcamLayer = [AVPlayerLayer playerLayerWithPlayer:vcamPlayer];
     vcamLayer.videoGravity = AVLayerVideoGravityResizeAspectFill;
     [vcamPlayer play];
-    CADisplayLink *link = [CADisplayLink displayLinkWithTarget:[VCamEngine class] selector:@selector(tick)];
-    [link addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
-    vcam_log(@"Original Player Started");
+    
+    if (!globalLink) {
+        globalLink = [CADisplayLink displayLinkWithTarget:[VCamCenturyEngine class] selector:@selector(tick)];
+        [globalLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
+    }
+    vcam_log(@"Century Player Engine Initialized");
 }
 
 %hook AVCaptureVideoPreviewLayer
@@ -93,7 +103,10 @@ static void setup_player(NSString *u) {
         AVCaptureSession *s = self.session; BOOL f = NO;
         for (AVCaptureInput *i in s.inputs) { if ([i isKindOfClass:[AVCaptureDeviceInput class]] && ((AVCaptureDeviceInput *)i).device.position == AVCaptureDevicePositionFront) { f = YES; break; } }
         vcamLayer.transform = f ? CATransform3DMakeAffineTransform(CGAffineTransformMakeScale(-1, 1)) : CATransform3DIdentity;
-        update_vcam_status(f ? @"ORIGINAL (FRONT)" : @"ORIGINAL ACTIVE", [UIColor greenColor]);
+        
+        BOOL ready = vcamPlayer.status == AVPlayerStatusReadyToPlay && vcamPlayer.currentItem.status == AVPlayerItemStatusReadyToPlay;
+        if (!ready) { update_vcam_status(@"ENGINE CONNECTING...", [UIColor yellowColor]); }
+        else { update_vcam_status(f ? @"CENTURY ACTIVE (FRONT)" : @"CENTURY ACTIVE", [UIColor greenColor]); }
     }
 }
 %end
@@ -108,7 +121,7 @@ static void setup_player(NSString *u) {
 %hook AVCapturePhoto
 - (NSData *)fileDataRepresentation {
     UIImage *snap = objc_getAssociatedObject(self.resolvedSettings, "vcamSnapshot");
-    if (snap) return UIImageJPEGRepresentation(snap, 0.9);
+    if (snap) { vcam_log(@"Century Photo Hijack Success"); return UIImageJPEGRepresentation(snap, 0.95); }
     return %orig;
 }
 - (CGImageRef)CGImageRepresentation { UIImage *snap = objc_getAssociatedObject(self.resolvedSettings, "vcamSnapshot"); if (snap) return snap.CGImage; return %orig; }
@@ -121,5 +134,5 @@ static void setup_player(NSString *u) {
 %ctor {
     NSDictionary *p = [NSDictionary dictionaryWithContentsOfFile:@"/var/mobile/Library/Preferences/com.murkaska.vcampro.plist"];
     if (p) { enabled = p[@"enabled"] ? [p[@"enabled"] boolValue] : YES; if (p[@"rtspURL"]) rtspURL = p[@"rtspURL"]; }
-    vcam_log(@"VCAM V99.0 Original Ready");
+    vcam_log(@"VCAM V100.0 Century Ready");
 }
