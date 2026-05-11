@@ -1,6 +1,7 @@
-// VCAM V119.0: The Web Master - WKWebView Stream Engine (Chrome Logic)
+// VCAM V119.1: The Web Master - WebView Stream Engine (Fixed Build Errors)
 #import <UIKit/UIKit.h>
 #import <WebKit/WebKit.h>
+#import <AVFoundation/AVFoundation.h>
 #import <objc/runtime.h>
 
 static BOOL enabled = YES;
@@ -35,6 +36,7 @@ static void setup_web_engine(void) {
         
         vcamWebView = [[WKWebView alloc] initWithFrame:vcamWindow.bounds configuration:config];
         vcamWebView.backgroundColor = [UIColor clearColor];
+        vcamWebView.opaque = NO;
         vcamWebView.scrollView.scrollEnabled = NO;
         [vcamWindow addSubview:vcamWebView];
         
@@ -52,16 +54,28 @@ static void setup_web_engine(void) {
     if (enabled) {
         setup_web_engine();
         vcamWindow.hidden = NO;
-        AVCaptureSession *s = self.session; BOOL f = NO;
-        for (AVCaptureInput *i in s.inputs) { if ([i isKindOfClass:objc_getClass("AVCaptureDeviceInput")] && ((AVCaptureDeviceInput *)i).device.position == 2) { f = YES; break; } }
+        
+        AVCaptureSession *s = [self session];
+        BOOL f = NO;
+        if (s) {
+            for (AVCaptureInput *i in [s inputs]) {
+                if ([i isKindOfClass:[AVCaptureDeviceInput class]]) {
+                    AVCaptureDeviceInput *di = (AVCaptureDeviceInput *)i;
+                    if (di.device.position == AVCaptureDevicePositionFront) {
+                        f = YES;
+                        break;
+                    }
+                }
+            }
+        }
         vcamWebView.transform = f ? CGAffineTransformMakeScale(-1, 1) : CGAffineTransformIdentity;
-        self.opacity = 0.01;
+        [self setOpacity:0.01];
     }
 }
 %end
 
 %hook AVCapturePhotoOutput
-- (void)capturePhotoWithSettings:(id)s delegate:(id)d {
+- (void)capturePhotoWithSettings:(AVCapturePhotoSettings *)s delegate:(id)d {
     if (enabled && snapshotForPhoto) objc_setAssociatedObject(s, "vcamS", snapshotForPhoto, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     %orig;
 }
@@ -69,11 +83,15 @@ static void setup_web_engine(void) {
 
 %hook AVCapturePhoto
 - (NSData *)fileDataRepresentation {
-    UIImage *snap = objc_getAssociatedObject(self.resolvedSettings, "vcamS");
+    UIImage *snap = objc_getAssociatedObject([self resolvedSettings], "vcamS");
     if (snap) return UIImageJPEGRepresentation(snap, 0.95);
     return %orig;
 }
-- (struct CGImage *)CGImageRepresentation { UIImage *snap = objc_getAssociatedObject(self.resolvedSettings, "vcamS"); if (snap) return snap.CGImage; return %orig; }
+- (struct CGImage *)CGImageRepresentation {
+    UIImage *snap = objc_getAssociatedObject([self resolvedSettings], "vcamS");
+    if (snap) return snap.CGImage;
+    return %orig;
+}
 %end
 
 %hook AVCaptureSession
