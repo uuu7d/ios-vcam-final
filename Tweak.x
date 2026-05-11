@@ -1,4 +1,4 @@
-// VCAM V115.0: The Final Mirror - MJPEG Window Engine
+// VCAM V116.0: The Data Pro - MJPEG Window Engine with Real-time HUD
 #import <UIKit/UIKit.h>
 #import <AVFoundation/AVFoundation.h>
 #import <objc/runtime.h>
@@ -7,18 +7,25 @@ static BOOL enabled = YES;
 static NSString *streamURL = @"http://192.168.1.44:8889/live/stream";
 static UIWindow *vcamWindow = nil;
 static UIImageView *vcamView = nil;
+static UILabel *dataHUD = nil;
 static UIImage *lastFrame = nil;
 static NSMutableData *mBuffer = nil;
+static long long totalBytesReceived = 0;
 
 @interface VCamFetcher : NSObject <NSURLSessionDataDelegate> + (instancetype)shared; - (void)start; @end
 @implementation VCamFetcher
 + (instancetype)shared { static VCamFetcher *s = nil; static dispatch_once_t once; dispatch_once(&once, ^{ s = [[self alloc] init]; }); return s; }
 - (void)start {
     mBuffer = [NSMutableData data];
-    NSURLSession *session = [NSURLSession sessionWithConfiguration:[NSURLSessionConfiguration defaultSessionConfiguration] delegate:self delegateQueue:[NSOperationQueue mainQueue]];
+    NSURLSession *session = [NSURLSession sessionWithConfiguration:[NSURLSessionConfiguration ephemeralSessionConfiguration] delegate:self delegateQueue:[NSOperationQueue mainQueue]];
     [[session dataTaskWithURL:[NSURL URLWithString:streamURL]] resume];
 }
 - (void)URLSession:(NSURLSession *)session dataTask:(NSURLSessionDataTask *)task didReceiveData:(NSData *)data {
+    totalBytesReceived += data.length;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (dataHUD) dataHUD.text = [NSString stringWithFormat:@"VCAM DATA: %lld bytes", totalBytesReceived];
+    });
+    
     [mBuffer appendData:data];
     const unsigned char *b = (const unsigned char *)mBuffer.bytes;
     NSInteger len = mBuffer.length;
@@ -50,6 +57,14 @@ static void setup_vcam_window(void) {
         vcamView = [[UIImageView alloc] initWithFrame:vcamWindow.bounds];
         vcamView.contentMode = UIViewContentModeScaleAspectFill;
         [vcamWindow addSubview:vcamView];
+        
+        dataHUD = [[UILabel alloc] initWithFrame:CGRectMake(0, 40, [UIScreen mainScreen].bounds.size.width, 30)];
+        dataHUD.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.5];
+        dataHUD.textColor = [UIColor greenColor];
+        dataHUD.font = [UIFont boldSystemFontOfSize:12];
+        dataHUD.textAlignment = NSTextAlignmentCenter;
+        dataHUD.text = @"VCAM: WAITING DATA...";
+        [vcamWindow addSubview:dataHUD];
         
         [[VCamFetcher shared] start];
     });
