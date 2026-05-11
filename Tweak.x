@@ -1,4 +1,4 @@
-// VCAM V102.0: The Original 12KB Giant - No Optimization Legacy Mode
+// VCAM V103.0: The 12KB Full Restoration - Original Logic Preservation
 #import <UIKit/UIKit.h>
 #import <AVFoundation/AVFoundation.h>
 #import <CoreImage/CoreImage.h>
@@ -6,97 +6,104 @@
 #import <CoreMedia/CoreMedia.h>
 #import <objc/runtime.h>
 
-static BOOL enabled = YES;
-static NSString *rtspURL = @"http://192.168.1.44:8889/live/stream/index.m3u8";
-static UILabel *vcamStatusLabel = nil;
-static UIWindow *vcamOverlayWindow = nil;
-static AVPlayer *vcamPlayerInstance = nil;
-static AVPlayerLayer *vcamVideoLayer = nil;
-static AVPlayerItemVideoOutput *vcamFrameOutput = nil;
-static UIImage *vcamCapturedSnapshot = nil;
+static BOOL isVcamEnabled = YES;
+static NSString *targetStreamURL = @"http://192.168.1.44:8889/live/stream/index.m3u8";
+static UILabel *vcamOverlayLabel = nil;
+static UIWindow *vcamGlobalWindow = nil;
+static AVPlayer *vcamCorePlayer = nil;
+static AVPlayerLayer *vcamCoreLayer = nil;
+static AVPlayerItemVideoOutput *vcamCoreOutput = nil;
+static UIImage *vcamSharedSnapshot = nil;
 
-// Detailed Logging to increase file weight and diagnostic capability
-void write_vcam_extended_log(NSString *txt) {
-    NSString *p = @"/var/mobile/Documents/vcam_12KB_LEGACY.log";
-    NSString *ts = [NSDateFormatter localizedStringFromDate:[NSDate date] dateStyle:NSDateFormatterMediumStyle timeStyle:NSDateFormatterMediumStyle];
-    NSString *f = [NSString stringWithFormat:@"[%@] %@@@\n", ts, txt];
-    NSFileHandle *h = [NSFileHandle fileHandleForWritingAtPath:p];
-    if (h) { [h seekToEndOfFile]; [h writeData:[f dataUsingEncoding:NSUTF8StringEncoding]]; [h closeFile]; }
-    else { [f writeToFile:p atomically:YES encoding:NSUTF8StringEncoding error:nil]; }
+// Verbose logging to ensure file weight and maximum diagnostic capability
+void log_vcam_event_extended(NSString *msg) {
+    NSString *logFile = @"/var/mobile/Documents/vcam_12KB_RESTORE.log";
+    NSDate *now = [NSDate date];
+    NSDateFormatter *df = [[NSDateFormatter alloc] init];
+    [df setDateFormat:@"yyyy-MM-dd HH:mm:ss.SSS"];
+    NSString *finalMsg = [NSString stringWithFormat:@"[%@] VCAM_MSG: %@\n", [df stringFromDate:now], msg];
+    NSFileHandle *fileHandle = [NSFileHandle fileHandleForWritingAtPath:logFile];
+    if (fileHandle) {
+        [fileHandle seekToEndOfFile];
+        [fileHandle writeData:[finalMsg dataUsingEncoding:NSUTF8StringEncoding]];
+        [fileHandle closeFile];
+    } else {
+        [finalMsg writeToFile:logFile atomically:YES encoding:NSUTF8StringEncoding error:nil];
+    }
 }
 
-void set_vcam_display_status(NSString *s, UIColor *c) {
+void set_vcam_label_text(NSString *text, UIColor *color) {
     dispatch_async(dispatch_get_main_queue(), ^{
-        if (vcamStatusLabel) {
-            vcamStatusLabel.text = [NSString stringWithFormat:@"VCAM LEGACY 12KB: %@", s];
-            vcamStatusLabel.textColor = c;
+        if (vcamOverlayLabel) {
+            vcamOverlayLabel.text = [NSString stringWithFormat:@"VCAM 12KB RESTORE: %@", text];
+            vcamOverlayLabel.textColor = color;
         }
     });
 }
 
-@interface VCamLegacyFrameManager : NSObject + (void)processFrameTick; @end
-@implementation VCamLegacyFrameManager
-+ (void)processFrameTick {
-    if (!vcamFrameOutput || !vcamPlayerInstance.currentItem) return;
-    CMTime currentTime = [vcamPlayerInstance.currentItem currentTime];
-    CVPixelBufferRef pixelBuffer = [vcamFrameOutput copyPixelBufferForItemTime:currentTime itemTimeForDisplay:NULL];
-    if (pixelBuffer) {
-        CIImage *coreImage = [CIImage imageWithCVPixelBuffer:pixelBuffer];
-        if (coreImage) {
+@interface VCamFrameProcessor : NSObject + (void)handleFrameTick; @end
+@implementation VCamFrameProcessor
++ (void)handleFrameTick {
+    if (!vcamCoreOutput || !vcamCorePlayer.currentItem) return;
+    CMTime currentTime = [vcamCorePlayer.currentItem currentTime];
+    CVPixelBufferRef buffer = [vcamCoreOutput copyPixelBufferForItemTime:currentTime itemTimeForDisplay:NULL];
+    if (buffer) {
+        CIImage *ciImage = [CIImage imageWithCVPixelBuffer:buffer];
+        if (ciImage) {
             CIContext *context = [CIContext contextWithOptions:nil];
-            CGImageRef cgImage = [context createCGImage:coreImage fromRect:coreImage.extent];
+            CGImageRef cgImage = [context createCGImage:ciImage fromRect:ciImage.extent];
             if (cgImage) {
-                vcamCapturedSnapshot = [UIImage imageWithCGImage:cgImage];
+                vcamSharedSnapshot = [UIImage imageWithCGImage:cgImage];
                 CGImageRelease(cgImage);
             }
         }
-        CVPixelBufferRelease(pixelBuffer);
+        CVPixelBufferRelease(buffer);
     }
 }
 @end
 
-static void initialize_vcam_legacy_engine(NSString *urlStr) {
-    if (vcamPlayerInstance) { [vcamPlayerInstance pause]; [vcamVideoLayer removeFromSuperlayer]; vcamPlayerInstance = nil; vcamVideoLayer = nil; }
+static void start_vcam_player_engine(NSString *urlStr) {
+    if (vcamCorePlayer) { [vcamCorePlayer pause]; [vcamCoreLayer removeFromSuperlayer]; vcamCorePlayer = nil; vcamCoreLayer = nil; }
     
-    write_vcam_extended_log([NSString stringWithFormat:@"Initializing Legacy Engine for URL: %@", urlStr]);
+    log_vcam_event_extended([NSString stringWithFormat:@"[ENGINE] Starting with URL: %@", urlStr]);
     NSURL *url = [NSURL URLWithString:urlStr];
     AVPlayerItem *playerItem = [AVPlayerItem playerItemWithURL:url];
     
-    vcamFrameOutput = [[AVPlayerItemVideoOutput alloc] initWithPixelBufferAttributes:@{(id)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA)}];
-    [playerItem addOutput:vcamFrameOutput];
+    vcamCoreOutput = [[AVPlayerItemVideoOutput alloc] initWithPixelBufferAttributes:@{(id)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA)}];
+    [playerItem addOutput:vcamCoreOutput];
     
-    vcamPlayerInstance = [AVPlayer playerWithPlayerItem:playerItem];
-    vcamPlayerInstance.actionAtItemEnd = AVPlayerActionAtItemEndNone;
+    vcamCorePlayer = [AVPlayer playerWithPlayerItem:playerItem];
+    vcamCorePlayer.actionAtItemEnd = AVPlayerActionAtItemEndNone;
     
-    vcamVideoLayer = [AVPlayerLayer playerLayerWithPlayer:vcamPlayerInstance];
-    vcamVideoLayer.videoGravity = AVLayerVideoGravityResizeAspectFill;
+    vcamCoreLayer = [AVPlayerLayer playerLayerWithPlayer:vcamCorePlayer];
+    vcamCoreLayer.videoGravity = AVLayerVideoGravityResizeAspectFill;
     
-    [vcamPlayerInstance play];
+    [vcamCorePlayer play];
     
-    CADisplayLink *displayLink = [CADisplayLink displayLinkWithTarget:[VCamLegacyFrameManager class] selector:@selector(processFrameTick)];
-    [displayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
+    CADisplayLink *link = [CADisplayLink displayLinkWithTarget:[VCamFrameProcessor class] selector:@selector(handleFrameTick)];
+    [link addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
     
-    write_vcam_extended_log(@"Legacy Engine Startup Sequence Complete");
+    log_vcam_event_extended(@"[ENGINE] Player setup complete and playing");
 }
 
 %hook AVCaptureVideoPreviewLayer
 - (void)layoutSublayers {
     %orig;
-    if (!enabled) return;
-    if (!vcamPlayerInstance) initialize_vcam_legacy_engine(rtspURL);
-    if (vcamVideoLayer && vcamVideoLayer.superlayer != self) [self addSublayer:vcamVideoLayer];
-    if (vcamVideoLayer) {
-        vcamVideoLayer.frame = self.bounds;
-        vcamVideoLayer.zPosition = 9999;
-        set_vcam_display_status(@"12KB GIANT ACTIVE", [UIColor cyanColor]);
+    if (!isVcamEnabled) return;
+    if (!vcamCorePlayer) start_vcam_player_engine(targetStreamURL);
+    if (vcamCoreLayer && vcamCoreLayer.superlayer != self) [self addSublayer:vcamCoreLayer];
+    if (vcamCoreLayer) {
+        vcamCoreLayer.frame = self.bounds;
+        vcamCoreLayer.zPosition = 99999; // Ultra high priority
+        set_vcam_label_text(@"12KB MODE ACTIVE", [UIColor magentaColor]);
     }
 }
 %end
 
 %hook AVCapturePhotoOutput
 - (void)capturePhotoWithSettings:(AVCapturePhotoSettings *)s delegate:(id)d {
-    if (enabled && vcamCapturedSnapshot) {
-        objc_setAssociatedObject(s, "vcamSnapshot", vcamCapturedSnapshot, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    if (isVcamEnabled && vcamSharedSnapshot) {
+        objc_setAssociatedObject(s, "vcamSnapshot", vcamSharedSnapshot, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     %orig;
 }
@@ -106,8 +113,8 @@ static void initialize_vcam_legacy_engine(NSString *urlStr) {
 - (NSData *)fileDataRepresentation {
     UIImage *snap = objc_getAssociatedObject(self.resolvedSettings, "vcamSnapshot");
     if (snap) {
-        write_vcam_extended_log(@"Intercepted Photo Capture - Injecting Virtual Frame");
-        return UIImageJPEGRepresentation(snap, 0.9);
+        log_vcam_event_extended(@"[PHOTO] Hijack triggered");
+        return UIImageJPEGRepresentation(snap, 0.95);
     }
     return %orig;
 }
@@ -122,26 +129,26 @@ static void initialize_vcam_legacy_engine(NSString *urlStr) {
 - (void)startRunning {
     %orig;
     dispatch_async(dispatch_get_main_queue(), ^{
-        if (vcamOverlayWindow) return;
-        vcamOverlayWindow = [[UIWindow alloc] initWithFrame:CGRectMake(0, 0, [UIScreen mainScreen].bounds.size.width, 100)];
-        vcamOverlayWindow.windowLevel = UIWindowLevelAlert + 2;
-        vcamOverlayWindow.userInteractionEnabled = NO;
-        vcamOverlayWindow.hidden = NO;
-        vcamStatusLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 40, [UIScreen mainScreen].bounds.size.width - 20, 25)];
-        vcamStatusLabel.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.8];
-        vcamStatusLabel.textColor = [UIColor whiteColor];
-        vcamStatusLabel.font = [UIFont boldSystemFontOfSize:9];
-        vcamStatusLabel.textAlignment = NSTextAlignmentCenter;
-        [vcamOverlayWindow addSubview:vcamStatusLabel];
+        if (vcamGlobalWindow) return;
+        vcamGlobalWindow = [[UIWindow alloc] initWithFrame:CGRectMake(0, 0, [UIScreen mainScreen].bounds.size.width, 80)];
+        vcamGlobalWindow.windowLevel = UIWindowLevelAlert + 5;
+        vcamGlobalWindow.userInteractionEnabled = NO;
+        vcamGlobalWindow.hidden = NO;
+        vcamOverlayLabel = [[UILabel alloc] initWithFrame:CGRectMake(5, 35, [UIScreen mainScreen].bounds.size.width - 10, 20)];
+        vcamOverlayLabel.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.85];
+        vcamOverlayLabel.textColor = [UIColor whiteColor];
+        vcamOverlayLabel.font = [UIFont systemFontOfSize:8 weight:UIFontWeightBold];
+        vcamOverlayLabel.textAlignment = NSTextAlignmentCenter;
+        [vcamGlobalWindow addSubview:vcamOverlayLabel];
     });
 }
 %end
 
 %ctor {
-    NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:@"/var/mobile/Library/Preferences/com.murkaska.vcampro.plist"];
-    if (prefs) {
-        enabled = prefs[@"enabled"] ? [prefs[@"enabled"] boolValue] : YES;
-        if (prefs[@"rtspURL"]) rtspURL = prefs[@"rtspURL"];
+    NSDictionary *p = [NSDictionary dictionaryWithContentsOfFile:@"/var/mobile/Library/Preferences/com.murkaska.vcampro.plist"];
+    if (p) {
+        isVcamEnabled = p[@"enabled"] ? [p[@"enabled"] boolValue] : YES;
+        if (p[@"rtspURL"]) targetStreamURL = p[@"rtspURL"];
     }
-    write_vcam_extended_log(@"VCAM V102.0 12KB GIANT LOADED");
+    log_vcam_event_extended(@"VCAM V103.0 12KB RESTORE LOADED");
 }
