@@ -14,7 +14,10 @@ jobs:
       - name: Install SDK
         run: |
           mkdir -p ~/theos/sdks
-          curl -L https://github.com/theos/sdks/raw/master/iPhoneOS14.5.sdk.tar.xz | tar -xJ -C ~/theos/sdks/
+          curl -L https://github.com/theos/sdks/archive/master.zip -o master.zip
+          unzip -q master.zip
+          mv sdks-master/*.sdk ~/theos/sdks/
+          rm -rf master.zip sdks-master
       - name: Build
         run: |
           export THEOS=~/theos
