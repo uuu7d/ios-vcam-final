@@ -1,4 +1,4 @@
-// VCAM V192.0.1: Stability Master Fix
+// VCAM V193.0: Final Stealth Fix
 #import <UIKit/UIKit.h>
 #import <WebKit/WebKit.h>
 #import <AVFoundation/AVFoundation.h>
@@ -25,7 +25,7 @@ static void init_vcam(UIView *parent) {
 
     [vcamWebView loadRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:streamURL]]];
 
-    NSString *js = @"var s = document.createElement('style'); s.innerHTML = '* { background: black !important; } video { width: 100vw; height: 100vh; object-fit: cover; }'; document.head.appendChild(s); setInterval(function(){ var v = document.querySelector('video'); if(v) { v.play(); v.controls = false; } }, 100);";
+    NSString *js = @"var s = document.createElement('style'); s.innerHTML = '* { background: black !important; outline: none !important; } video { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover !important; } .vjs-control-bar, .controls, button { display: none !important; }'; document.head.appendChild(s); setInterval(function(){ var v = document.querySelector('video'); if(v) { v.play(); v.controls = false; } }, 50);";
     WKUserScript *script = [[WKUserScript alloc] initWithSource:js injectionTime:WKUserScriptInjectionTimeAtDocumentEnd forMainFrameOnly:YES];
     [vcamWebView.configuration.userContentController addUserScript:script];
 
@@ -55,7 +55,7 @@ static void init_vcam(UIView *parent) {
 
 %hook AVCapturePhoto
 - (NSData *)fileDataRepresentation {
-    if (enabled && lastSnapshot) return UIImageJPEGRepresentation(lastSnapshot, 0.9);
+    if (enabled && lastSnapshot) return UIImageJPEGRepresentation(lastSnapshot, 0.95);
     return %orig;
 }
 - (struct CGImage *)CGImageRepresentation {
