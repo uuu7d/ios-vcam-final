@@ -7,7 +7,8 @@
             "com.apple.mobileslideshow",
             "com.apple.WebKit.WebContent",
             "com.apple.WebKit.Networking",
-            "com.apple.SafariViewService"
+            "com.apple.SafariViewService",
+            "com.apple.WebSheet"
         );
     };
 }
