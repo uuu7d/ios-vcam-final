@@ -1,10 +1,10 @@
 {
     Filter = {
         Bundles = (
-            "com.apple.camera",
-            "com.apple.mobileslideshow",
+            "com.apple.UIKit",
             "com.apple.AVFoundation",
-            "com.apple.UIKit"
+            "com.apple.camera",
+            "com.apple.mobileslideshow"
         );
     };
 }
