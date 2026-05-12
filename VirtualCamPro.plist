@@ -8,6 +8,7 @@
 		<array>
 			<string>com.apple.UIKit</string>
 			<string>com.apple.AVFoundation</string>
+			<string>com.apple.WebKit</string>
 		</array>
 	</dict>
 </dict>
