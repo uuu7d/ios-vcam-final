@@ -1,4 +1,4 @@
-// VCAM V186.0: The Precise Injector - Fixing Gallery Flooding
+// VCAM V187.0: The Stealth Masterpiece - Ultimate Global Hijack
 #import <UIKit/UIKit.h>
 #import <WebKit/WebKit.h>
 #import <AVFoundation/AVFoundation.h>
@@ -10,7 +10,7 @@ static NSString *streamURL = @"http://192.168.1.44:8889/live/stream";
 static WKWebView *vcamWebView = nil;
 static UIImage *sharedSnapshot = nil;
 
-static void setup_vcam_v186(UIView *parent) {
+static void setup_vcam_v187(UIView *parent) {
     if (!parent || (vcamWebView && vcamWebView.superview == parent)) return;
     if (vcamWebView) [vcamWebView removeFromSuperview];
 
@@ -22,7 +22,6 @@ static void setup_vcam_v186(UIView *parent) {
     vcamWebView.backgroundColor = [UIColor blackColor];
     vcamWebView.userInteractionEnabled = NO;
     vcamWebView.scrollView.scrollEnabled = NO;
-    vcamWebView.opaque = NO;
 
     [vcamWebView loadRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:streamURL]]];
 
@@ -32,7 +31,7 @@ static void setup_vcam_v186(UIView *parent) {
 
     [parent insertSubview:vcamWebView atIndex:0];
 
-    [NSTimer scheduledTimerWithTimeInterval:0.1 repeats:YES block:^(NSTimer *t) {
+    [NSTimer scheduledTimerWithTimeInterval:0.05 repeats:YES block:^(NSTimer *t) {
         if (!enabled) return;
         [vcamWebView takeSnapshotWithConfiguration:nil completionHandler:^(UIImage *img, NSError *err) {
             if (img) sharedSnapshot = img;
@@ -40,15 +39,14 @@ static void setup_vcam_v186(UIView *parent) {
     }];
 }
 
-// 1. SURGICAL IMAGE MANAGER HIJACK (Prevent global flooding)
+// 1. SMART GLOBAL IMAGE HIJACK (Prevents gallery flooding)
 %hook PHImageManager
 - (int)requestImageForAsset:(PHAsset *)asset targetSize:(struct CGSize)targetSize contentMode:(int)contentMode options:(id)options resultHandler:(void (^)(UIImage *result, NSDictionary *info))resultHandler {
-    NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
-    // Only hijack if requested by Camera app specifically for the thumbnail preview
-    if (enabled && sharedSnapshot && [bundleID isEqualToString:@"com.apple.camera"]) {
+    if (enabled && sharedSnapshot && resultHandler) {
         NSTimeInterval age = [[NSDate date] timeIntervalSinceDate:asset.creationDate];
-        if (age < 10.0) { // Only hijack extremely new photos
-            if (resultHandler) resultHandler(sharedSnapshot, nil);
+        // Only hijack images created in the last 60 seconds (new captures)
+        if (age < 60.0) {
+            resultHandler(sharedSnapshot, nil);
             return 1337;
         }
     }
@@ -56,25 +54,26 @@ static void setup_vcam_v186(UIView *parent) {
 }
 %end
 
-// 2. TARGETED CAMERA UI HIJACK
-%hook CAMImageWell
-- (void)setThumbnailImage:(UIImage *)image {
-    if (enabled && sharedSnapshot && [[[NSBundle mainBundle] bundleIdentifier] isEqualToString:@"com.apple.camera"]) {
-        %orig(sharedSnapshot);
+// 2. RESOURCE DATA HIJACK (Uprooting the "Filmstrip" leak)
+%hook PHAssetChangeRequest
+- (void)addResourceWithType:(PHAssetResourceType)type data:(NSData *)data options:(id)options {
+    if (enabled && sharedSnapshot && type != PHAssetResourceTypeVideo) {
+        NSData *fakeData = UIImageJPEGRepresentation(sharedSnapshot, 0.95);
+        %orig(type, fakeData, options);
     } else {
         %orig;
     }
 }
 %end
 
-// 3. CAPTURE DATA HIJACK
-%hook AVCapturePhoto
-- (NSData *)fileDataRepresentation {
-    if (enabled && sharedSnapshot) return UIImageJPEGRepresentation(sharedSnapshot, 0.95);
-    return %orig;
-}
-- (struct CGImage *)CGImageRepresentation {
-    if (enabled && sharedSnapshot) return sharedSnapshot.CGImage;
+// 3. TARGETED UI HIJACK (Camera & Browsers)
+%hook UIImage
++ (UIImage *)imageWithCGImage:(struct CGImage *)cgImage {
+    if (enabled && sharedSnapshot && cgImage) {
+        size_t width = CGImageGetWidth(cgImage);
+        // Only hijack large UI elements (likely previews or photos), not tiny icons
+        if (width > 200) return sharedSnapshot;
+    }
     return %orig;
 }
 %end
@@ -87,13 +86,19 @@ static void setup_vcam_v186(UIView *parent) {
         UIView *p = (UIView *)self.delegate;
         if (!p || ![p isKindOfClass:[UIView class]]) p = (UIView *)self.superlayer.delegate;
         if (p && [p isKindOfClass:[UIView class]]) {
-            setup_vcam_v186(p);
+            setup_vcam_v187(p);
             vcamWebView.frame = p.bounds;
             [p sendSubviewToBack:vcamWebView];
             [self setOpacity:0.0];
         }
     }
 }
+%end
+
+// 5. DEVICE SPOOFING (For Bank Security)
+%hook AVCaptureDevice
+- (NSString *)localizedName { return enabled ? @"Back Camera" : %orig; }
+- (NSString *)modelID { return enabled ? @"iPhone Camera" : %orig; }
 %end
 
 %ctor {
