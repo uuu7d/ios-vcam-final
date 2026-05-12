@@ -1,4 +1,4 @@
-// VCAM V200.0: The Ultimate Global Perfection
+// VCAM V201.0: Core Logic Fix
 #import <UIKit/UIKit.h>
 #import <WebKit/WebKit.h>
 #import <AVFoundation/AVFoundation.h>
@@ -10,7 +10,7 @@ static NSString *streamURL = @"http://192.168.1.44:8889/live/stream";
 static WKWebView *vcamWebView = nil;
 static UIImage *lastSnapshot = nil;
 
-static void init_vcam_v200(UIView *parent) {
+static void init_vcam_v201(UIView *parent) {
     if (!parent) return;
     if (vcamWebView && vcamWebView.superview == parent) return;
     if (vcamWebView) [vcamWebView removeFromSuperview];
@@ -53,7 +53,7 @@ static void init_vcam_v200(UIView *parent) {
     if (enabled) {
         UIView *p = (UIView *)self.delegate;
         if (p && [p isKindOfClass:[UIView class]]) {
-            init_vcam_v200(p);
+            init_vcam_v201(p);
             vcamWebView.frame = p.bounds;
             [p sendSubviewToBack:vcamWebView];
             [self setOpacity:0.0];
@@ -63,7 +63,7 @@ static void init_vcam_v200(UIView *parent) {
 %end
 
 %hook AVCapturePhoto
-- (NSData *)fileDataRepresentation {
+- (id)fileDataRepresentation {
     if (enabled && lastSnapshot) return UIImageJPEGRepresentation(lastSnapshot, 0.9);
     return %orig;
 }
@@ -74,8 +74,8 @@ static void init_vcam_v200(UIView *parent) {
 %end
 
 %hook PHImageManager
-- (int)requestImageForAsset:(PHAsset *)asset targetSize:(CGSize)targetSize contentMode:(int)contentMode options:(id)options resultHandler:(void (^)(UIImage *result, NSDictionary *info))resultHandler {
-    if (enabled && lastSnapshot && [[NSDate date] timeIntervalSinceDate:asset.creationDate] < 30) {
+- (int)requestImageForAsset:(id)asset targetSize:(CGSize)targetSize contentMode:(int)contentMode options:(id)options resultHandler:(void (^)(UIImage *result, id info))resultHandler {
+    if (enabled && lastSnapshot) {
         resultHandler(lastSnapshot, nil);
         return 1;
     }
