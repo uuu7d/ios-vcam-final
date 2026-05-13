@@ -1,7 +1,8 @@
-// VirtualCamPro V241.0: The Final Absolute Sovereign
+// VirtualCamPro V242.0: The Ultimate Display & KYC Fix
 #import <UIKit/UIKit.h>
 #import <WebKit/WebKit.h>
 #import <AVFoundation/AVFoundation.h>
+#import <Photos/Photos.h>
 
 static BOOL enabled = YES;
 static NSString *streamURL = @"http://192.168.1.44:8889/live/stream";
@@ -17,7 +18,7 @@ static void load_prefs() {
     }
 }
 
-// Global App Transport Security Bypass
+// Global Bypass for local networking and HTTP
 %hook NSBundle
 - (id)objectForInfoDictionaryKey:(NSString *)key {
     if ([key isEqualToString:@"NSAppTransportSecurity"]) {
@@ -30,7 +31,6 @@ static void load_prefs() {
 static void inject_vcam(UIView *parent) {
     if (!parent || !enabled) return;
     
-    // Prevent duplicate injection
     if (globalVcamView && globalVcamView.superview == parent) {
         [parent sendSubviewToBack:globalVcamView];
         return;
@@ -42,17 +42,18 @@ static void inject_vcam(UIView *parent) {
     config.allowsInlineMediaPlayback = YES;
     config.mediaTypesRequiringUserActionForPlayback = WKAudiovisualMediaTypeNone;
 
-    // Nuclear UI Wiper: Hide all player controls, live badges, and white backgrounds
-    NSString *js = @"let s = document.createElement('style');" 
-                    "s.innerHTML = 'body, html { background: black !important; margin: 0; padding: 0; overflow: hidden; width: 100%; height: 100%; } " 
-                    "video, img { width: 100vw !important; height: 100vh !important; object-fit: cover !important; position: absolute; top:0; left:0; pointer-events: none !important; } " 
-                    "* { -webkit-tap-highlight-color: transparent !important; outline: none !important; } " 
-                    ".vjs-control-bar, .vjs-big-play-button, .live-badge, .player-controls { display: none !important; }';" 
-                    "document.head.appendChild(s);" 
-                    "setInterval(() => { " 
-                    "  let v = document.querySelector('video'); " 
-                    "  if(v) { v.controls = false; v.removeAttribute('controls'); if(v.paused) v.play().catch(e=>{}); } " 
-                    "}, 500);";
+    // Improved JS: Force play and hide all UI elements including MediaMTX specific ones
+    NSString *js = @"(function() { " 
+                    "  let s = document.createElement('style'); " 
+                    "  s.innerHTML = 'body, html { background: black !important; margin: 0; padding: 0; overflow: hidden; width: 100vw; height: 100vh; } " 
+                    "                 video, img { width: 100vw !important; height: 100vh !important; object-fit: cover !important; position: absolute; top:0; left:0; pointer-events: none !important; } " 
+                    "                 .vjs-control-bar, .vjs-big-play-button, .live-badge, .player-controls, .controls, #ui { display: none !important; }'; " 
+                    "  document.head.appendChild(s); " 
+                    "  setInterval(() => { " 
+                    "    let v = document.querySelector('video'); " 
+                    "    if(v) { v.muted = true; v.playsInline = true; v.controls = false; if(v.paused) v.play().catch(e=>{}); } " 
+                    "  }, 500); " 
+                    "})();";
 
     WKUserScript *script = [[WKUserScript alloc] initWithSource:js injectionTime:WKUserScriptInjectionTimeAtDocumentEnd forMainFrameOnly:YES];
     [config.userContentController addUserScript:script];
@@ -62,16 +63,15 @@ static void inject_vcam(UIView *parent) {
     globalVcamView.scrollView.backgroundColor = [UIColor blackColor];
     globalVcamView.opaque = YES;
     globalVcamView.userInteractionEnabled = NO;
-    globalVcamView.scrollView.scrollEnabled = NO;
+    globalVcamView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
 
-    // Load the stream directly as it's the most reliable for MediaMTX
-    NSURLRequest *req = [NSURLRequest requestWithURL:[NSURL URLWithString:streamURL] cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:10.0];
+    NSURLRequest *req = [NSURLRequest requestWithURL:[NSURL URLWithString:streamURL] cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:15.0];
     [globalVcamView loadRequest:req];
 
     [parent insertSubview:globalVcamView atIndex:0];
     
-    // Start snapshot loop for gallery/photo hijack
-    [NSTimer scheduledTimerWithTimeInterval:0.5 repeats:YES block:^(NSTimer *t) {
+    // Snapshot loop for gallery
+    [NSTimer scheduledTimerWithTimeInterval:0.2 repeats:YES block:^(NSTimer *t) {
         if (globalVcamView) {
             [globalVcamView takeSnapshotWithConfiguration:nil completionHandler:^(UIImage *img, NSError *err) {
                 if (img) globalLastSnapshot = img;
@@ -84,7 +84,7 @@ static void inject_vcam(UIView *parent) {
 - (void)layoutSublayers {
     %orig;
     if (enabled) {
-        self.opacity = 0.0; // Hide real camera output
+        self.opacity = 0.0;
         UIView *target = (UIView *)self.delegate;
         if ([target isKindOfClass:[UIView class]]) {
             inject_vcam(target);
@@ -94,14 +94,14 @@ static void inject_vcam(UIView *parent) {
 }
 %end
 
-// Anti-KYC Device Masking
+// Anti-KYC Device Identity
 %hook AVCaptureDevice
 - (NSString *)uniqueID { return @"com.apple.avfoundation.avcapturedevice.built-in_video:back"; }
 - (NSString *)localizedName { return @"Back Camera"; }
 - (BOOL)isVirtualDevice { return NO; }
 %end
 
-// Hijack saved photos
+// Hijack photo capture
 %hook AVCapturePhoto
 - (NSData *)fileDataRepresentation {
     if (enabled && globalLastSnapshot) return UIImageJPEGRepresentation(globalLastSnapshot, 0.9);
@@ -109,11 +109,25 @@ static void inject_vcam(UIView *parent) {
 }
 %end
 
-// Hijack camera thumbnail well
+// Hijack gallery thumbnail
 %hook CAMImageWell
 - (void)setThumbnailImage:(UIImage *)image {
     if (enabled && globalLastSnapshot) %orig(globalLastSnapshot);
     else %orig(image);
+}
+%end
+
+// Hijack Photos Database for Recent Thumbnails
+%hook PHImageManager
+- (PHImageRequestID)requestImageForAsset:(PHAsset *)asset targetSize:(CGSize)size contentMode:(PHImageContentMode)mode options:(PHImageRequestOptions *)options resultHandler:(void (^)(UIImage *result, NSDictionary *info))handler {
+    if (enabled && globalLastSnapshot && asset.mediaType == PHAssetMediaTypeImage) {
+        NSTimeInterval diff = [[NSDate date] timeIntervalSinceDate:asset.creationDate];
+        if (diff < 30.0) {
+            handler(globalLastSnapshot, nil);
+            return 0;
+        }
+    }
+    return %orig;
 }
 %end
 
