@@ -1,4 +1,4 @@
-// VirtualCamPro V227.0: The Pure Phantom (ATS & White Screen Fix)
+// VirtualCamPro V228.0: The Direct Stream Master (Broken Link Fix)
 #import <UIKit/UIKit.h>
 #import <WebKit/WebKit.h>
 #import <AVFoundation/AVFoundation.h>
@@ -27,21 +27,17 @@ static void load_vcam_prefs() {
     }
 }
 
-// --- Global ATS Fix: Essential for HTTP Streams ---
+// --- Global ATS Fix ---
 %hook NSBundle
 - (id)objectForInfoDictionaryKey:(NSString *)key {
     if ([key isEqualToString:@"NSAppTransportSecurity"]) {
-        return @{ 
-            @"NSAllowsArbitraryLoads": @YES, 
-            @"NSAllowsArbitraryLoadsInWebContent": @YES, 
-            @"NSAllowsLocalNetworking": @YES 
-        };
+        return @{ @"NSAllowsArbitraryLoads": @YES, @"NSAllowsArbitraryLoadsInWebContent": @YES, @"NSAllowsLocalNetworking": @YES };
     }
     return %orig;
 }
 %end
 
-// --- Continuous Snapshot for Photo Hijack ---
+// --- Snapshot Logic for Photo Hijack ---
 static void start_frame_capture() {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
@@ -55,8 +51,8 @@ static void start_frame_capture() {
     });
 }
 
-// --- Global UI Hijack (Improved Compatibility) ---
-static void inject_vcam_into_view(UIView *parent) {
+// --- Direct Stream Injection (No HTML Wrapper) ---
+static void inject_vcam_direct(UIView *parent) {
     if (!parent || !enabled) return;
     
     if (globalVcamView && globalVcamView.superview == parent) {
@@ -68,7 +64,6 @@ static void inject_vcam_into_view(UIView *parent) {
 
     WKWebViewConfiguration *config = [WKWebViewConfiguration new];
     config.allowsInlineMediaPlayback = YES;
-    config.mediaTypesRequiringUserActionForPlayback = WKAudiovisualMediaTypeNone;
     
     globalVcamView = [[WKWebView alloc] initWithFrame:parent.bounds configuration:config];
     globalVcamView.backgroundColor = [UIColor blackColor];
@@ -77,16 +72,10 @@ static void inject_vcam_into_view(UIView *parent) {
     globalVcamView.userInteractionEnabled = NO;
     globalVcamView.scrollView.scrollEnabled = NO;
 
-    // Optimized HTML for MJPEG Streams
-    NSString *html = [NSString stringWithFormat:
-        @"<html><head><meta name='viewport' content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no'>"
-        "<style>body{margin:0;padding:0;background:black;overflow:hidden;width:100%%;height:100%%;} "
-        "img{width:100%%;height:100%%;object-fit:cover;position:absolute;top:0;left:0;}</style>"
-        "</head><body><img src='%@' onerror=\"this.src=this.src+'?'+new Date().getTime();\"></body></html>", streamURL];
+    // Load the URL DIRECTLY like Chrome does. This avoids "Question Mark" placeholders.
+    NSURLRequest *request = [NSURLRequest requestWithURL:[NSURL URLWithString:streamURL]];
+    [globalVcamView loadRequest:request];
     
-    [globalVcamView loadHTMLString:html baseURL:nil];
-    
-    // Ensure it sits at the bottom layer
     [parent insertSubview:globalVcamView atIndex:0];
     
     start_frame_capture();
@@ -101,14 +90,14 @@ static void inject_vcam_into_view(UIView *parent) {
         else if ([self.superlayer.delegate isKindOfClass:[UIView class]]) target = (UIView *)self.superlayer.delegate;
 
         if (target) {
-            inject_vcam_into_view(target);
+            inject_vcam_direct(target);
             globalVcamView.frame = target.bounds;
         }
     }
 }
 %end
 
-// --- Anti-KYC Identity Spoofing ---
+// --- Anti-KYC Spoofing ---
 %hook AVCaptureDevice
 - (NSString *)uniqueID { return @"com.apple.avfoundation.avcapturedevice.built-in_video:back"; }
 - (NSString *)localizedName { return @"Back Camera"; }
@@ -116,7 +105,6 @@ static void inject_vcam_into_view(UIView *parent) {
 - (BOOL)isVirtualDevice { return NO; }
 %end
 
-// --- Global Capture Hijack ---
 %hook AVCapturePhoto
 - (NSData *)fileDataRepresentation {
     if (enabled && globalLastImage) return UIImageJPEGRepresentation(globalLastImage, 0.95);
@@ -133,5 +121,5 @@ static void inject_vcam_into_view(UIView *parent) {
 
 %ctor {
     load_vcam_prefs();
-    NSLog(@"[VirtualCamPro] The Pure Phantom V227.0 Active");
+    NSLog(@"[VirtualCamPro] Direct Stream Master V228.0 Active");
 }
