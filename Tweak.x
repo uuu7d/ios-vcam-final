@@ -1,4 +1,4 @@
-// Tweak.x - VirtualCamPro V269.0: System Sovereign
+// Tweak.x - VirtualCamPro V270.0: Core Sovereign Pro
 #import <UIKit/UIKit.h>
 #import <AVFoundation/AVFoundation.h>
 #import <Photos/Photos.h>
@@ -10,10 +10,24 @@ static BOOL enabled = YES;
 static NSString *streamURL = @"http://192.168.1.44:8889/live/stream";
 static MJPEGStreamReader *gReader = nil;
 static UIImage *gLastFrame = nil;
-static UILabel *gDiagnosticsHUD = nil;
 
-// Pro-level Helper: Convert UIImage to CMSampleBuffer for direct system injection
-static CMSampleBufferRef CreateInjectedBuffer(UIImage *img) {
+// Helper to add a tiny bit of noise for KYC bypassing
+static UIImage *AddStealthNoise(UIImage *img) {
+    if (!img) return nil;
+    UIGraphicsBeginImageContextWithOptions(img.size, YES, img.scale);
+    [img drawAtPoint:CGPointZero];
+    CGContextRef context = UIGraphicsGetCurrentContext();
+    CGContextSetFillColorWithColor(context, [[UIColor whiteColor] colorWithAlphaComponent:0.01].CGColor);
+    for (int i = 0; i < 50; i++) {
+        CGRect rect = CGRectMake(arc4random_uniform(img.size.width), arc4random_uniform(img.size.height), 1, 1);
+        CGContextFillRect(context, rect);
+    }
+    UIImage *noisyImg = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+    return noisyImg;
+}
+
+static CMSampleBufferRef CreateFakeBuffer(UIImage *img) {
     if (!img) return NULL;
     CGImageRef cg = img.CGImage;
     CVPixelBufferRef px = NULL;
@@ -21,21 +35,21 @@ static CMSampleBufferRef CreateInjectedBuffer(UIImage *img) {
     if (s != kCVReturnSuccess) return NULL;
 
     CMVideoFormatDescriptionRef vdesc = NULL;
-    CMVideoFormatDescriptionCreateForImageBuffer(kCFAllocatorDefault, px, &vdesc);
+    CMVideoFormatDescriptionCreateForImageBuffer(nil, px, &vdesc);
     CMSampleTimingInfo t = { kCMTimeInvalid, kCMTimeZero, kCMTimeInvalid };
     CMSampleBufferRef sb = NULL;
-    CMSampleBufferCreateForImageBuffer(kCFAllocatorDefault, px, YES, nil, nil, vdesc, &t, &sb);
+    CMSampleBufferCreateForImageBuffer(nil, px, YES, nil, nil, vdesc, &t, &sb);
     
     CFRelease(px);
     if (vdesc) CFRelease(vdesc);
     return sb;
 }
 
-// 1. Core Data Injection: Forcing apps to take our frames instead of real ones
+// 1. System-wide Data Hijack
 %hook AVCaptureVideoDataOutput
 - (void)captureOutput:(AVCaptureOutput *)o didOutputSampleBuffer:(CMSampleBufferRef)s fromConnection:(AVCaptureConnection *)c {
     if (enabled && gLastFrame) {
-        CMSampleBufferRef fake = CreateInjectedBuffer(gLastFrame);
+        CMSampleBufferRef fake = CreateFakeBuffer(gLastFrame);
         if (fake) {
             %orig(o, fake, c);
             CFRelease(fake);
@@ -46,44 +60,50 @@ static CMSampleBufferRef CreateInjectedBuffer(UIImage *img) {
 }
 %end
 
-// 2. Visual Hijack (Preview for user)
-%hook AVCaptureVideoPreviewLayer
-- (void)layoutSublayers {
-    %orig;
-    if (!enabled) return;
-    self.opacity = 0.0;
-    UIView *p = (UIView *)self.delegate;
-    if ([p isKindOfClass:[UIView class]]) {
-        UIImageView *v = [p viewWithTag:9999];
-        if (!v) {
-            v = [[UIImageView alloc] initWithFrame:p.bounds];
-            v.tag = 9999;
-            v.contentMode = UIViewContentModeScaleAspectFill;
-            [p insertSubview:v atIndex:0];
-        }
-        if (gLastFrame) v.image = gLastFrame;
-    }
-}
-%end
-
-// 3. Global Capture Hijack (Photo/Video Files)
+// 2. Photo & Metadata Hijack
 %hook AVCapturePhoto
 - (NSData *)fileDataRepresentation {
-    if (enabled && gLastFrame) return UIImageJPEGRepresentation(gLastFrame, 0.95);
+    if (enabled && gLastFrame) {
+        UIImage *noisy = AddStealthNoise(gLastFrame);
+        return UIImageJPEGRepresentation(noisy ?: gLastFrame, 0.96);
+    }
+    return %orig;
+}
+- (CGImageRef)CGImageRepresentation {
+    if (enabled && gLastFrame) return gLastFrame.CGImage;
     return %orig;
 }
 %end
 
-// 4. Legacy Hijack (For older apps/banks)
-%hook AVCaptureStillImageOutput
-- (void)captureStillImageAsynchronouslyFromConnection:(AVCaptureConnection *)connection completionHandler:(void (^)(CMSampleBufferRef, NSError *))handler {
-    if (enabled && gLastFrame) {
-        CMSampleBufferRef fake = CreateInjectedBuffer(gLastFrame);
-        handler(fake, nil);
-        if (fake) CFRelease(fake);
-        return;
+// 3. UI & Gallery Picker Hijack (The Fix for Thumbnails)
+%hook PHImageManager
+- (PHImageRequestID)requestImageForAsset:(PHAsset *)asset targetSize:(CGSize)size contentMode:(PHImageContentMode)contentMode options:(PHImageRequestOptions *)options resultHandler:(void (^)(UIImage *result, NSDictionary *info))resultHandler {
+    if (enabled && gLastFrame && [asset.creationDate timeIntervalSinceNow] > -60) {
+        resultHandler(gLastFrame, nil);
+        return 0;
     }
+    return %orig;
+}
+%end
+
+%hook AVCaptureVideoPreviewLayer
+- (void)layoutSublayers {
     %orig;
+    if (enabled) {
+        self.opacity = 0.0;
+        UIView *p = (UIView *)self.delegate;
+        if ([p isKindOfClass:[UIView class]]) {
+            UIImageView *v = [p viewWithTag:9999];
+            if (!v) {
+                v = [[UIImageView alloc] initWithFrame:p.bounds];
+                v.tag = 9999;
+                v.contentMode = UIViewContentModeScaleAspectFill;
+                v.backgroundColor = [UIColor blackColor];
+                [p insertSubview:v atIndex:0];
+            }
+            if (gLastFrame) v.image = gLastFrame;
+        }
+    }
 }
 %end
 
