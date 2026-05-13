@@ -6,15 +6,7 @@
 	<dict>
 		<key>Bundles</key>
 		<array>
-			<string>com.apple.UIKit</string>
-			<string>com.apple.AVFoundation</string>
-			<string>com.apple.WebKit</string>
-			<string>com.apple.WebKit.WebContent</string>
 			<string>com.apple.camera</string>
-			<string>com.apple.mobileslideshow</string>
-			<string>com.apple.assetsd</string>
-			<string>com.apple.PhotosUI</string>
-			<string>com.apple.SafariViewService</string>
 			<string>com.apple.mobilesafari</string>
 			<string>com.google.chrome.ios</string>
 			<string>org.telegram.messenger</string>
