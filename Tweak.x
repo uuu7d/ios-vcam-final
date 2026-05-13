@@ -1,4 +1,4 @@
-// VirtualCamPro V231.0: The System Ghost Master (Universal Bypass)
+// VirtualCamPro V232.0: The System Phantom Master (Total Lockdown)
 #import <UIKit/UIKit.h>
 #import <AVFoundation/AVFoundation.h>
 #import <Photos/Photos.h>
@@ -31,7 +31,7 @@ static CVPixelBufferRef pixelBufferFromImage(UIImage *image) {
 }
 
 // --- Global Stream Sync (Shared Memory) ---
-static void start_master_sync() {
+static void start_phantom_sync() {
     static BOOL isRunning = NO;
     if (isRunning) return;
     isRunning = YES;
@@ -54,13 +54,13 @@ static void start_master_sync() {
                     }
                 }
             }
-            [NSThread sleepForTimeInterval:0.04]; // ~25 FPS
+            [NSThread sleepForTimeInterval:0.04];
         }
         isRunning = NO;
     });
 }
 
-// --- Direct Data Injection (The "Everywhere" Fix for Browsers/Banks) ---
+// --- Direct Data Injection (The "Everywhere" Fix for Safari/Banks) ---
 @interface VCAPDelegateWrapper : NSObject <AVCaptureVideoDataOutputSampleBufferDelegate>
 @property (nonatomic, weak) id originalDelegate;
 @end
@@ -68,14 +68,14 @@ static void start_master_sync() {
 @implementation VCAPDelegateWrapper
 - (void)captureOutput:(AVCaptureOutput *)output didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer fromConnection:(AVCaptureConnection *)connection {
     if (enabled && globalLastPixelBuffer) {
-        CMSampleTimingInfo timing;
-        CMSampleBufferGetSampleTimingInfo(sampleBuffer, 0, &timing);
+        CMSampleTimingInfo timingInfo;
+        CMSampleBufferGetSampleTimingInfo(sampleBuffer, 0, &timingInfo);
         
         CMVideoFormatDescriptionRef formatDesc = NULL;
         CMVideoFormatDescriptionCreateForImageBuffer(kCFAllocatorDefault, globalLastPixelBuffer, &formatDesc);
         
         CMSampleBufferRef newBuffer = NULL;
-        CMSampleBufferCreateReadyWithImageBuffer(kCFAllocatorDefault, globalLastPixelBuffer, formatDesc, &timing, &newBuffer);
+        CMSampleBufferCreateReadyWithImageBuffer(kCFAllocatorDefault, globalLastPixelBuffer, formatDesc, &timingInfo, &newBuffer);
         
         if (newBuffer) {
             [self.originalDelegate captureOutput:output didOutputSampleBuffer:newBuffer fromConnection:connection];
@@ -100,7 +100,7 @@ static void start_master_sync() {
 }
 %end
 
-// --- Visual Preview Hijack (Telegram/Camera Fix) ---
+// --- Visual Preview Hijack (Ultra Robust for Telegram/Camera) ---
 %hook AVCaptureVideoPreviewLayer
 - (void)layoutSublayers {
     %orig;
@@ -108,14 +108,17 @@ static void start_master_sync() {
         UIView *parent = nil;
         if ([self.delegate isKindOfClass:[UIView class]]) parent = (UIView *)self.delegate;
         else if ([self.superlayer.delegate isKindOfClass:[UIView class]]) parent = (UIView *)self.superlayer.delegate;
+        
+        // Fallback: Use the key window to bypass complex view hierarchies (Telegram fix)
+        if (!parent) parent = [UIApplication sharedApplication].keyWindow;
 
         if (parent) {
-            UIImageView *vcamView = (UIImageView *)[parent viewWithTag:9911];
+            UIImageView *vcamView = (UIImageView *)[parent viewWithTag:9922];
             if (!vcamView) {
                 vcamView = [[UIImageView alloc] initWithFrame:parent.bounds];
                 vcamView.backgroundColor = [UIColor blackColor];
                 vcamView.contentMode = UIViewContentModeScaleAspectFill;
-                vcamView.tag = 9911;
+                vcamView.tag = 9922;
                 vcamView.userInteractionEnabled = NO;
                 [parent addSubview:vcamView];
                 [parent bringSubviewToFront:vcamView];
@@ -130,7 +133,15 @@ static void start_master_sync() {
 }
 %end
 
-// --- Global Capture Hijack (Photo/Gallery) ---
+// --- Hardware Spoofing (Anti-Detection) ---
+%hook AVCaptureDevice
+- (NSString *)uniqueID { return @"com.apple.avfoundation.avcapturedevice.built-in_video:back"; }
+- (NSString *)localizedName { return @"Back Camera"; }
+- (AVCaptureDeviceType)deviceType { return AVCaptureDeviceTypeBuiltInWideAngleCamera; }
+- (BOOL)isVirtualDevice { return NO; }
+%end
+
+// --- Final Capture Fix (Photo/Gallery) ---
 %hook AVCapturePhoto
 - (NSData *)fileDataRepresentation {
     if (enabled && globalLastImage) return UIImageJPEGRepresentation(globalLastImage, 0.95);
@@ -145,13 +156,6 @@ static void start_master_sync() {
 }
 %end
 
-%hook AVCaptureDevice
-- (NSString *)uniqueID { return @"com.apple.avfoundation.avcapturedevice.built-in_video:back"; }
-- (NSString *)localizedName { return @"Back Camera"; }
-- (AVCaptureDeviceType)deviceType { return AVCaptureDeviceTypeBuiltInWideAngleCamera; }
-- (BOOL)isVirtualDevice { return NO; }
-%end
-
 %ctor {
     NSArray *paths = @[@"/var/mobile/Library/Preferences/com.murkaska.virtualcampro.plist", 
                        @"/var/jb/var/mobile/Library/Preferences/com.murkaska.virtualcampro.plist"];
@@ -164,6 +168,6 @@ static void start_master_sync() {
             break;
         }
     }
-    if (enabled) start_master_sync();
-    NSLog(@"[VirtualCamPro] Ghost Master V231.0 Active");
+    if (enabled) start_phantom_sync();
+    NSLog(@"[VirtualCamPro] Phantom Master V232.0 Active");
 }
