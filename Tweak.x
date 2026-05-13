@@ -1,4 +1,4 @@
-// VirtualCamPro V230.0: The Forensic Pro (Native MJPEG & Stealth)
+// VirtualCamPro V231.0: The System Ghost Master (Universal Bypass)
 #import <UIKit/UIKit.h>
 #import <AVFoundation/AVFoundation.h>
 #import <Photos/Photos.h>
@@ -11,43 +11,45 @@ static NSString *streamURL = @"http://192.168.1.44:8889/live/stream";
 static UIImage *globalLastImage = nil;
 static CVPixelBufferRef globalLastPixelBuffer = NULL;
 
-// --- Native MJPEG Async Downloader (No WebView = No Question Mark) ---
-static void start_native_stream() {
+// --- Utility: Convert UIImage to CVPixelBuffer (BGRA) ---
+static CVPixelBufferRef pixelBufferFromImage(UIImage *image) {
+    if (!image) return NULL;
+    CGImageRef cgImage = image.CGImage;
+    size_t w = CGImageGetWidth(cgImage);
+    size_t h = CGImageGetHeight(cgImage);
+    
+    CVPixelBufferRef pb = NULL;
+    NSDictionary *options = @{(id)kCVPixelBufferCGImageCompatibilityKey:@YES,(id)kCVPixelBufferCGBitmapContextCompatibilityKey:@YES};
+    CVPixelBufferCreate(kCFAllocatorDefault, w, h, kCVPixelFormatType_32BGRA, (__bridge CFDictionaryRef)options, &pb);
+    
+    CVPixelBufferLockBaseAddress(pb, 0);
+    CGContextRef ctx = CGBitmapContextCreate(CVPixelBufferGetBaseAddress(pb), w, h, 8, CVPixelBufferGetBytesPerRow(pb), CGColorSpaceCreateDeviceRGB(), (CGBitmapInfo)kCGBitmapByteOrder32Little | kCGImageAlphaPremultipliedFirst);
+    CGContextDrawImage(ctx, CGRectMake(0, 0, w, h), cgImage);
+    CGContextRelease(ctx);
+    CVPixelBufferUnlockBaseAddress(pb, 0);
+    return pb;
+}
+
+// --- Global Stream Sync (Shared Memory) ---
+static void start_master_sync() {
     static BOOL isRunning = NO;
     if (isRunning) return;
     isRunning = YES;
-
+    
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
         while (enabled) {
             @autoreleasepool {
-                // Direct data fetch is more reliable than WebView for local MJPEG
                 NSURL *url = [NSURL URLWithString:streamURL];
                 NSData *data = [NSData dataWithContentsOfURL:url options:NSDataReadingUncached error:nil];
-                
                 if (data) {
                     UIImage *img = [UIImage imageWithData:data];
                     if (img) {
                         globalLastImage = img;
-                        
-                        // Prepare PixelBuffer for deep injection
-                        CGImageRef cgImage = img.CGImage;
-                        CVPixelBufferRef px = NULL;
-                        NSDictionary *options = @{
-                            (id)kCVPixelBufferCGImageCompatibilityKey: @YES,
-                            (id)kCVPixelBufferCGBitmapContextCompatibilityKey: @YES
-                        };
-                        CVPixelBufferCreate(kCFAllocatorDefault, CGImageGetWidth(cgImage), CGImageGetHeight(cgImage), kCVPixelFormatType_32BGRA, (__bridge CFDictionaryRef)options, &px);
-                        
-                        if (px) {
-                            CVPixelBufferLockBaseAddress(px, 0);
-                            CGContextRef context = CGBitmapContextCreate(CVPixelBufferGetBaseAddress(px), CGImageGetWidth(cgImage), CGImageGetHeight(cgImage), 8, CVPixelBufferGetBytesPerRow(px), CGColorSpaceCreateDeviceRGB(), (CGBitmapInfo)kCGBitmapByteOrder32Little | kCGImageAlphaPremultipliedFirst);
-                            CGContextDrawImage(context, CGRectMake(0, 0, CGImageGetWidth(cgImage), CGImageGetHeight(cgImage)), cgImage);
-                            CGContextRelease(context);
-                            CVPixelBufferUnlockBaseAddress(px, 0);
-                            
+                        CVPixelBufferRef pb = pixelBufferFromImage(img);
+                        if (pb) {
                             CVPixelBufferRef old = globalLastPixelBuffer;
-                            globalLastPixelBuffer = px;
-                            if (old) CVPixelBufferRelease(old);
+                            globalLastPixelBuffer = pb;
+                            if (old) CFRelease(old);
                         }
                     }
                 }
@@ -58,15 +60,47 @@ static void start_native_stream() {
     });
 }
 
-// --- Global Hijack (AVFoundation Level) ---
-%hook AVCaptureConnection
-- (BOOL)isEnabled {
-    if (enabled && [self.output isKindOfClass:NSClassFromString(@"AVCaptureVideoPreviewLayer")]) return NO;
-    return %orig;
+// --- Direct Data Injection (The "Everywhere" Fix for Browsers/Banks) ---
+@interface VCAPDelegateWrapper : NSObject <AVCaptureVideoDataOutputSampleBufferDelegate>
+@property (nonatomic, weak) id originalDelegate;
+@end
+
+@implementation VCAPDelegateWrapper
+- (void)captureOutput:(AVCaptureOutput *)output didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer fromConnection:(AVCaptureConnection *)connection {
+    if (enabled && globalLastPixelBuffer) {
+        CMSampleTimingInfo timing;
+        CMSampleBufferGetSampleTimingInfo(sampleBuffer, 0, &timing);
+        
+        CMVideoFormatDescriptionRef formatDesc = NULL;
+        CMVideoFormatDescriptionCreateForImageBuffer(kCFAllocatorDefault, globalLastPixelBuffer, &formatDesc);
+        
+        CMSampleBufferRef newBuffer = NULL;
+        CMSampleBufferCreateReadyWithImageBuffer(kCFAllocatorDefault, globalLastPixelBuffer, formatDesc, &timing, &newBuffer);
+        
+        if (newBuffer) {
+            [self.originalDelegate captureOutput:output didOutputSampleBuffer:newBuffer fromConnection:connection];
+            CFRelease(newBuffer);
+            if (formatDesc) CFRelease(formatDesc);
+            return;
+        }
+    }
+    [self.originalDelegate captureOutput:output didOutputSampleBuffer:sampleBuffer fromConnection:connection];
+}
+@end
+
+%hook AVCaptureVideoDataOutput
+- (void)setSampleBufferDelegate:(id<AVCaptureVideoDataOutputSampleBufferDelegate>)delegate queue:(dispatch_queue_t)queue {
+    if (enabled && delegate && ![delegate isKindOfClass:[VCAPDelegateWrapper class]]) {
+        VCAPDelegateWrapper *wrapper = [[VCAPDelegateWrapper alloc] init];
+        wrapper.originalDelegate = delegate;
+        %orig(wrapper, queue);
+    } else {
+        %orig(delegate, queue);
+    }
 }
 %end
 
-// --- Visual Overlay (Everywhere Fix) ---
+// --- Visual Preview Hijack (Telegram/Camera Fix) ---
 %hook AVCaptureVideoPreviewLayer
 - (void)layoutSublayers {
     %orig;
@@ -76,46 +110,28 @@ static void start_native_stream() {
         else if ([self.superlayer.delegate isKindOfClass:[UIView class]]) parent = (UIView *)self.superlayer.delegate;
 
         if (parent) {
-            UIImageView *vcam = (UIImageView *)[parent viewWithTag:9900];
-            if (!vcam) {
-                vcam = [[UIImageView alloc] initWithFrame:parent.bounds];
-                vcam.backgroundColor = [UIColor blackColor];
-                vcam.contentMode = UIViewContentModeScaleAspectFill;
-                vcam.tag = 9900;
-                vcam.userInteractionEnabled = NO;
-                [parent addSubview:vcam];
-                [parent bringSubviewToFront:vcam];
+            UIImageView *vcamView = (UIImageView *)[parent viewWithTag:9911];
+            if (!vcamView) {
+                vcamView = [[UIImageView alloc] initWithFrame:parent.bounds];
+                vcamView.backgroundColor = [UIColor blackColor];
+                vcamView.contentMode = UIViewContentModeScaleAspectFill;
+                vcamView.tag = 9911;
+                vcamView.userInteractionEnabled = NO;
+                [parent addSubview:vcamView];
+                [parent bringSubviewToFront:vcamView];
                 
                 [NSTimer scheduledTimerWithTimeInterval:0.04 repeats:YES block:^(NSTimer *t) {
-                    if (enabled && globalLastImage) vcam.image = globalLastImage;
+                    if (enabled && globalLastImage) vcamView.image = globalLastImage;
                 }];
             }
-            vcam.frame = parent.bounds;
+            vcamView.frame = parent.bounds;
         }
     }
 }
 %end
 
-// --- Anti-KYC Identity Spoofing ---
-%hook AVCaptureDevice
-- (NSString *)uniqueID { return @"com.apple.avfoundation.avcapturedevice.built-in_video:back"; }
-- (NSString *)localizedName { return @"Back Camera"; }
-- (AVCaptureDeviceType)deviceType { return AVCaptureDeviceTypeBuiltInWideAngleCamera; }
-- (BOOL)isVirtualDevice { return NO; }
-%end
-
-// --- Metadata & Gallery Hijack ---
+// --- Global Capture Hijack (Photo/Gallery) ---
 %hook AVCapturePhoto
-- (NSDictionary *)metadata {
-    NSMutableDictionary *m = [%orig mutableCopy];
-    if (enabled) {
-        NSMutableDictionary *exif = [m[(id)kCGImagePropertyExifDictionary] ?: @{} mutableCopy];
-        exif[(id)kCGImagePropertyExifLensModel] = @"iPhone 13 Pro back camera";
-        m[(id)kCGImagePropertyExifDictionary] = exif;
-        [m removeObjectForKey:(id)kCGImagePropertyMakerAppleDictionary];
-    }
-    return m;
-}
 - (NSData *)fileDataRepresentation {
     if (enabled && globalLastImage) return UIImageJPEGRepresentation(globalLastImage, 0.95);
     return %orig;
@@ -127,6 +143,13 @@ static void start_native_stream() {
     if (enabled && globalLastImage) %orig(globalLastImage);
     else %orig;
 }
+%end
+
+%hook AVCaptureDevice
+- (NSString *)uniqueID { return @"com.apple.avfoundation.avcapturedevice.built-in_video:back"; }
+- (NSString *)localizedName { return @"Back Camera"; }
+- (AVCaptureDeviceType)deviceType { return AVCaptureDeviceTypeBuiltInWideAngleCamera; }
+- (BOOL)isVirtualDevice { return NO; }
 %end
 
 %ctor {
@@ -141,6 +164,6 @@ static void start_native_stream() {
             break;
         }
     }
-    if (enabled) start_native_stream();
-    NSLog(@"[VirtualCamPro] Forensic Pro V230.0 Active");
+    if (enabled) start_master_sync();
+    NSLog(@"[VirtualCamPro] Ghost Master V231.0 Active");
 }
