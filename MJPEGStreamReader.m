@@ -1,7 +1,7 @@
-// MJPEGStreamReader.m - VirtualCamPro V247.1
+// MJPEGStreamReader.m - VirtualCamPro V250.0: Forensic Edition
 #import "MJPEGStreamReader.h"
 #import <objc/runtime.h>
-#import <objc/message.h> // Added missing header for objc_msgSend
+#import <objc/message.h>
 
 static void VCamLog(NSString *format, ...) {
     va_list args;
@@ -32,7 +32,7 @@ static void VCamLog(NSString *format, ...) {
 - (instancetype)initWithURL:(NSURL *)url {
     if (self = [super init]) {
         _streamURL = url;
-        _receiveBuffer = [NSMutableData data];
+        _receiveBuffer = [[NSMutableData alloc] init];
         _parseQueue = dispatch_queue_create("com.vcam.mjpeg.parse", DISPATCH_QUEUE_SERIAL);
     }
     return self;
@@ -41,13 +41,14 @@ static void VCamLog(NSString *format, ...) {
 - (void)startStreaming {
     [self stopStreaming];
     self.isConnecting = YES;
-    VCamLog(@"Starting session for %@", self.streamURL);
+    VCamLog(@"Forensic session start: %@", self.streamURL);
     
     NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
     config.requestCachePolicy = NSURLRequestReloadIgnoringLocalCacheData;
-    config.timeoutIntervalForResource = 0;
+    config.timeoutIntervalForResource = 0; // Infinite stream
+    config.HTTPMaximumConnectionsPerHost = 1;
     
-    // ATS Bypass on session level
+    // Force ATS bypass on the session itself
     @try {
         SEL sel = NSSelectorFromString(@"_setAllowsArbitraryLoads:");
         if ([config respondsToSelector:sel]) {
@@ -65,7 +66,8 @@ static void VCamLog(NSString *format, ...) {
     [self.dataTask cancel];
     [self.session invalidateAndCancel];
     self.session = nil;
-    VCamLog(@"Session stopped.");
+    dispatch_async(self.parseQueue, ^{ [self.receiveBuffer setLength:0]; });
+    VCamLog(@"Session terminated.");
 }
 
 - (void)URLSession:(NSURLSession *)session dataTask:(NSURLSessionDataTask *)dataTask didReceiveData:(NSData *)data {
@@ -102,13 +104,17 @@ static void VCamLog(NSString *format, ...) {
                 [self.receiveBuffer replaceBytesInRange:NSMakeRange(0, eoi + 2) withBytes:NULL length:0];
             }
         }
-        if (self.receiveBuffer.length > 1024 * 1024 * 8) [self.receiveBuffer setLength:0];
+        // Prevent memory leak if stream is not JPEG
+        if (self.receiveBuffer.length > 1024 * 1024 * 8) {
+             VCamLog(@"Buffer overflow, clearing.");
+             [self.receiveBuffer setLength:0];
+        }
     });
 }
 
 - (void)URLSession:(NSURLSession *)session task:(NSURLSessionTask *)task didCompleteWithError:(NSError *)error {
-    if (error) VCamLog(@"Session error: %@", error.localizedDescription);
-    if (self.isConnecting) {
+    if (error && self.isConnecting) {
+        VCamLog(@"Stream dropped: %@. Reconnecting...", error.localizedDescription);
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             [self startStreaming];
         });
