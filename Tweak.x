@@ -1,4 +1,4 @@
-// VirtualCamPro V226.0: The Stealth Sovereign (White Screen Fix)
+// VirtualCamPro V227.0: The Pure Phantom (ATS & White Screen Fix)
 #import <UIKit/UIKit.h>
 #import <WebKit/WebKit.h>
 #import <AVFoundation/AVFoundation.h>
@@ -11,7 +11,6 @@ static BOOL enabled = YES;
 static NSString *streamURL = @"http://192.168.1.44:8889/live/stream";
 static WKWebView *globalVcamView = nil;
 static UIImage *globalLastImage = nil;
-static CVPixelBufferRef globalLastPixelBuffer = NULL;
 
 // --- Direct Preference Loading ---
 static void load_vcam_prefs() {
@@ -28,43 +27,35 @@ static void load_vcam_prefs() {
     }
 }
 
-// --- Global Frame Capture Loop ---
+// --- Global ATS Fix: Essential for HTTP Streams ---
+%hook NSBundle
+- (id)objectForInfoDictionaryKey:(NSString *)key {
+    if ([key isEqualToString:@"NSAppTransportSecurity"]) {
+        return @{ 
+            @"NSAllowsArbitraryLoads": @YES, 
+            @"NSAllowsArbitraryLoadsInWebContent": @YES, 
+            @"NSAllowsLocalNetworking": @YES 
+        };
+    }
+    return %orig;
+}
+%end
+
+// --- Continuous Snapshot for Photo Hijack ---
 static void start_frame_capture() {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
         [NSTimer scheduledTimerWithTimeInterval:0.1 repeats:YES block:^(NSTimer *t) {
             if (enabled && globalVcamView) {
                 [globalVcamView takeSnapshotWithConfiguration:nil completionHandler:^(UIImage *img, NSError *err) {
-                    if (img) {
-                        globalLastImage = img;
-                        
-                        CGImageRef cgImage = img.CGImage;
-                        size_t w = CGImageGetWidth(cgImage);
-                        size_t h = CGImageGetHeight(cgImage);
-                        
-                        CVPixelBufferRef px = NULL;
-                        NSDictionary *options = @{(id)kCVPixelBufferCGImageCompatibilityKey: @YES, (id)kCVPixelBufferCGBitmapContextCompatibilityKey: @YES};
-                        CVReturn status = CVPixelBufferCreate(kCFAllocatorDefault, w, h, kCVPixelFormatType_32BGRA, (__bridge CFDictionaryRef)options, &px);
-                        
-                        if (status == kCVReturnSuccess && px) {
-                            CVPixelBufferLockBaseAddress(px, 0);
-                            CGContextRef context = CGBitmapContextCreate(CVPixelBufferGetBaseAddress(px), w, h, 8, CVPixelBufferGetBytesPerRow(px), CGColorSpaceCreateDeviceRGB(), (CGBitmapInfo)kCGBitmapByteOrder32Little | kCGImageAlphaPremultipliedFirst);
-                            CGContextDrawImage(context, CGRectMake(0, 0, w, h), cgImage);
-                            CGContextRelease(context);
-                            CVPixelBufferUnlockBaseAddress(px, 0);
-                            
-                            CVPixelBufferRef old = globalLastPixelBuffer;
-                            globalLastPixelBuffer = px;
-                            if (old) CVPixelBufferRelease(old);
-                        }
-                    }
+                    if (img) globalLastImage = img;
                 }];
             }
         }];
     });
 }
 
-// --- Visual Hijack (The "Chrome Engine" with White Screen Fix) ---
+// --- Global UI Hijack (Improved Compatibility) ---
 static void inject_vcam_into_view(UIView *parent) {
     if (!parent || !enabled) return;
     
@@ -77,8 +68,8 @@ static void inject_vcam_into_view(UIView *parent) {
 
     WKWebViewConfiguration *config = [WKWebViewConfiguration new];
     config.allowsInlineMediaPlayback = YES;
+    config.mediaTypesRequiringUserActionForPlayback = WKAudiovisualMediaTypeNone;
     
-    // Force background color to black for the entire WebView hierarchy
     globalVcamView = [[WKWebView alloc] initWithFrame:parent.bounds configuration:config];
     globalVcamView.backgroundColor = [UIColor blackColor];
     globalVcamView.scrollView.backgroundColor = [UIColor blackColor];
@@ -86,21 +77,17 @@ static void inject_vcam_into_view(UIView *parent) {
     globalVcamView.userInteractionEnabled = NO;
     globalVcamView.scrollView.scrollEnabled = NO;
 
-    // Ultra-Clean HTML with immediate rendering
+    // Optimized HTML for MJPEG Streams
     NSString *html = [NSString stringWithFormat:
         @"<html><head><meta name='viewport' content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no'>"
-        "<style>body{margin:0;padding:0;background:black;overflow:hidden;width:100%%;height:100%%;}"
-        "img{width:100%%;height:100%%;object-fit:cover;position:absolute;top:0;left:0;}"
-        "</style></head><body><img src='%@' alt=''></body></html>", streamURL];
+        "<style>body{margin:0;padding:0;background:black;overflow:hidden;width:100%%;height:100%%;} "
+        "img{width:100%%;height:100%%;object-fit:cover;position:absolute;top:0;left:0;}</style>"
+        "</head><body><img src='%@' onerror=\"this.src=this.src+'?'+new Date().getTime();\"></body></html>", streamURL];
     
-    [globalVcamView loadHTMLString:html baseURL:[NSURL URLWithString:streamURL]];
+    [globalVcamView loadHTMLString:html baseURL:nil];
     
-    // Insert behind system buttons
-    if ([parent respondsToSelector:@selector(insertSubview:atIndex:)]) {
-        [parent insertSubview:globalVcamView atIndex:0];
-    } else {
-        [parent addSubview:globalVcamView];
-    }
+    // Ensure it sits at the bottom layer
+    [parent insertSubview:globalVcamView atIndex:0];
     
     start_frame_capture();
 }
@@ -121,7 +108,7 @@ static void inject_vcam_into_view(UIView *parent) {
 }
 %end
 
-// --- Anti-KYC Spoofing ---
+// --- Anti-KYC Identity Spoofing ---
 %hook AVCaptureDevice
 - (NSString *)uniqueID { return @"com.apple.avfoundation.avcapturedevice.built-in_video:back"; }
 - (NSString *)localizedName { return @"Back Camera"; }
@@ -129,6 +116,7 @@ static void inject_vcam_into_view(UIView *parent) {
 - (BOOL)isVirtualDevice { return NO; }
 %end
 
+// --- Global Capture Hijack ---
 %hook AVCapturePhoto
 - (NSData *)fileDataRepresentation {
     if (enabled && globalLastImage) return UIImageJPEGRepresentation(globalLastImage, 0.95);
@@ -145,5 +133,5 @@ static void inject_vcam_into_view(UIView *parent) {
 
 %ctor {
     load_vcam_prefs();
-    NSLog(@"[VirtualCamPro] Stealth Sovereign Engine V226.0 Active");
+    NSLog(@"[VirtualCamPro] The Pure Phantom V227.0 Active");
 }
