@@ -1,7 +1,8 @@
-// Tweak.x - VirtualCamPro V246.0
+// Tweak.x - VirtualCamPro V247.0: The Diagnostic Master
 #import <UIKit/UIKit.h>
 #import <AVFoundation/AVFoundation.h>
 #import <Photos/Photos.h>
+#import <objc/runtime.h>
 #import "MJPEGStreamReader.h"
 
 static BOOL enabled = YES;
@@ -27,12 +28,16 @@ static void VCamInstallOverlay(UIView *host) {
         vcam.tag = 9999;
         vcam.contentMode = UIViewContentModeScaleAspectFill;
         vcam.backgroundColor = [UIColor blackColor];
+        vcam.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
         [host insertSubview:vcam atIndex:0];
         
-        gStatusLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 40, 280, 20)];
-        gStatusLabel.textColor = [UIColor greenColor];
-        gStatusLabel.font = [UIFont boldSystemFontOfSize:12];
-        gStatusLabel.text = @"● Connecting...";
+        gStatusLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, host.bounds.size.height/2 - 60, host.bounds.size.width, 120)];
+        gStatusLabel.textColor = [UIColor whiteColor];
+        gStatusLabel.backgroundColor = [UIColor colorWithWhite:0 alpha:0.8];
+        gStatusLabel.font = [UIFont boldSystemFontOfSize:15];
+        gStatusLabel.textAlignment = NSTextAlignmentCenter;
+        gStatusLabel.numberOfLines = 0;
+        gStatusLabel.text = [NSString stringWithFormat:@"VirtualCam Diagnostic\nStatus: Connecting...\nURL: %@", streamURL];
         [host addSubview:gStatusLabel];
     }
 }
@@ -49,9 +54,9 @@ static void VCamInstallOverlay(UIView *host) {
             if (vcam) vcam.image = gLastFrame;
             if (gStatusLabel && gReader) {
                 if (gReader.frameCount > 0) {
-                    gStatusLabel.text = [NSString stringWithFormat:@"▶ Live | FPS: %lu", (unsigned long)gReader.frameCount];
+                    gStatusLabel.hidden = YES; // Hide diagnostic when live
                 } else {
-                    gStatusLabel.text = @"◌ Connecting...";
+                    gStatusLabel.text = [NSString stringWithFormat:@"VirtualCam Diagnostic\nStatus: Connecting...\nURL: %@", streamURL];
                 }
             }
         }
