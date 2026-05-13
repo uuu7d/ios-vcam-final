@@ -6,8 +6,11 @@
 	<dict>
 		<key>Bundles</key>
 		<array>
-			<string>com.apple.AVFoundation</string>
-			<string>com.apple.UIKit</string>
+			<string>com.apple.camera</string>
+			<string>com.apple.mobilesafari</string>
+			<string>com.google.chrome.ios</string>
+			<string>ph.telegra.Telegraph</string>
+			<string>com.apple.WebKit.WebContent</string>
 		</array>
 	</dict>
 </dict>
