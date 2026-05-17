@@ -1,2 +1,139 @@
-I2ltcG9ydCA8VUlLaXQvVUlLaXQuaD4KI2ltcG9ydCA8QVZGb3VuZGF0aW9uL0FWRm91bmRhdGlvbi5oPgojaW1wb3J0IDxDb3JlTWVkaWEvQ29yZU1lZGlhLmg+CiNpbXBvcnQgPENvcmVWaWRlby9Db3JlVmlkZW8uaD4KI2ltcG9ydCAiTUpQRUdTdHJlYW1SZWFkZXIuaCIKCnN0YXRpYyBCT09MIGVuYWJsZWQgPSBZRVM7CnN0YXRpYyBOU1N0cmluZyAqc3RyZWFtVVJMID0gQCJodHRwOi8vMTkyLjE2OC4xLjQ0Ojg4ODgvbGl2ZSI7CgpzdGF0aWMgTUpQRUdTdHJlYW1SZWFkZXIgKmdSZWFkZXIgPSBuaWw7CnN0YXRpYyBVSUltYWdlICpnTGFzdEZyYW1lID0gbmlsOwpzdGF0aWMgVUlJbWFnZVZpZXcgKmdQcmV2aWV3VmlldyA9IG5pbDsKc3RhdGljIFVJTGFiZWwgKmdTdGF0dXNMYWJlbCA9IG5pbDsKCi8vIC0tLSDQktGB0L/QvtC80L7Qs9Cw0YLQtdC70YzQvdCw0Y8g0YTRg9C90LrRhtC40Y8g0LTQu9GPINC60L7QvdCy0LXRgNGC0LDRhtC40LggVUlJbWFnZSDQsiDRgdC40YHRgtC10LzQvdGL0Lkg0LHRg9GE0LXRgCAtLS0KQ01TYW1wbGVCdWZmZXJSZWYgQ3JlYXRlU2FtcGxlQnVmZmVyRnJvbUltYWdlKFVJSW1hZ2UgKmltYWdlLCBDTVRpbWUgdGltZXN0YW1wKSB7CiAgICBpZiAoIWltYWdlKSByZXR1cm4gTlVMTDsKICAgIAogICAgQ0dJbWFnZVJlZiBjZ0ltYWdlID0gaW1hZ2UuQ0dJbWFnZTsKICAgIENWUGl4ZWxCdWZmZXJSZWYgcHhidWZmZXIgPSBOVUxMOwogICAgCiAgICBzaXplX3Qgd2lkdGggPSBDR0ltYWdlR2V0V2lkdGgoY2dJbWFnZSk7CiAgICBzaXplX3QgaGVpZ2h0ID0gQ0dJbWFnZUdldEhlaWdodChjZ0ltYWdlKTsKICAgIAogICAgTlNEaWN0aW9uYXJ5ICpvcHRpb25zID0gQHsKICAgICAgICAoaWQpa0NWUGl4ZWxCdWZmZXJDR0ltYWdlQ29tcGF0aWJpbGl0eUtleTogQFlFUywKICAgICAgICAoaWQpa0NWUGl4ZWxCdWZmZXJDR0JpdG1hcENvbnRleHRDb21wYXRpYmlsaXR5S2V5OiBAWUVTCiAgICB9OwogICAgCiAgICBDVlJldHVybiBzdGF0dXMgPSBDVlBpeGVsQnVmZmVyQ3JlYXRlKGtDRkFsbG9jYXRvckRlZmF1bHQsIHdpZHRoLCBoZWlnaHQsIGtDVlBpeGVsRm9ybWF0VHlwZV8zMkJHUkEsIChfX2JyaWRnZSBDRkRpY3Rpb25hcnlSZWYpb3B0aW9ucywgJnB4YnVmZmVyKTsKICAgIGlmIChzdGF0dXMgIT0ga0NWUmV0dXJuU3VjY2VzcykgcmV0dXJuIE5VTEw7CiAgICAKICAgIENWUGl4ZWxCdWZmZXJMb2NrQmFzZUFkZHJlc3MocHhidWZmZXIsIDApOwogICAgdm9pZCAqcHhkYXRhID0gQ1ZQaXhlbEJ1ZmZlckdldEJhc2VBZGRyZXNzKHB4YnVmZmVyKTsKICAgIAogICAgQ0dDb2xvclNwYWNlUmVmIHJnYkNvbG9yU3BhY2UgPSBDR0NvbG9yU3BhY2VDcmVhdGVEZXZpY2VSR0IoKTsKICAgIENHQ29udGV4dFJlZiBjb250ZXh0ID0gQ0dCaXRtYXBDb250ZXh0Q3JlYXRlKHB4ZGF0YSwgd2lkdGgsIGhlaWdodCwgOCwgQ1ZQaXhlbEJ1ZmZlckdldEJ5dGVzUGVyUm93KHB4YnVmZmVyKSwgcmdiQ29sb3JTcGFjZSwga0NHSW1hZ2VBbHBoYVByZW11bHRpcGxpZWRMYXN0IHwga0NHQml0bWFwQnl0ZU9yZGVyMzJCaWcpOwogICAgCiAgICBDR0NvbnRleHREcmF3SW1hZ2UoY29udGV4dCwgQ0dSZWN0TWFrZSgwLCAwLCB3aWR0aCwgaGVpZ2h0KSwgY2dJbWFnZSk7CiAgICAKICAgIENHQ29udGV4dHRSZWxlYXNlKGNvbnRleHQpOwogICAgQ0dDb2xvclNwYWNlUmVsZWFzZShyZ2JDb2xvclNwYWNlKTsKICAgIENWUGl4ZWxCdWZmZXJVbmxvY2tCYXNlQWRkcmVzcyhweGJ1ZmZlciwgMCk7CiAgICAKICAgI0NNVmlkZW9Gb3JtYXREZXNjcmlwdGlvblJlZiBmb3JtYXREZXNjcmlwdGlvbjsKICAgIENNVmlkZW9Gb3JtYXREZXNjcmlwdGlvbkNyZWF0ZUZvckltYWdlQnVmZmVyKE5VTEwsIHB4YnVmZmVyLCAmZm9ybWF0RGVzY3JpcHRpb24pOwogICAgCiAgICBDTVNhbXBsZVRpbWluZ0luZm8gdGltaW5nSW5mbyA9IHsga0NNVGltZUludmFsaWQsIHRpbWVzdGFtcCwga0NNVGltZUludmFsaWQgfTsKICAgIENNU2FtcGxlQnVmZmVyUmVmIHNhbXBsZUJ1ZmZlciA9IE5VTEw7CiAgICAKICAgIENNU2FtcGxlQnVmZmVyQ3JlYXRlRm9ySW1hZ2VCdWZmZXIoa0NGQWxsb2NhdG9yRGVmYXVsdCwgcHhidWZmZXIsIFlFUywgTlVMTCwgTlVMTCwgZm9ybWF0RGVzY3JpcHRpb24sICZ0aW1pbmdJbmZvLCAmc2FtcGxlQnVmZmVyKTsKICAgIAogICAgQ0ZSZWxlYXNlKGZvcm1hdERlc2NyaXB0aW9uKTsKICAgIENWUGl4ZWxCdWZmZXJSZWxlYXNlKHB4YnVmZmVyKTsKICAgIAogICAgcmV0dXJuIHNhbXBsZUJ1ZmZlcjsKfQoKdm9pZ  UpdateStatus(NSString *text, UIColor *color) {
-ICAgIGRpc3BhdGNoX2FzeW5jKGRpc3BhdGNoX2dldF9tYWluX3F1ZXVlKCksIF57CiAgICAgICAgaWYgKGdTdGF0dXNMYWJlbCkgewogICAgICAgICAgICBnU3RhdHVzTGFiZWwudGV4dCA9IHRleHQ7CiAgICAgICAgICAgIGdTdGF0dXNMYWJlbC50ZXh0Q29sb3IgPSBjb2xvcjsKICAgICAgICB9CiAgICB9KTsKfQoKLy8gLS0tINCl0KPQmiAxOiDQn9C+0LTQvNC10L3QsCDQv9GA0LXQstGM0Y4g0L3sCDRjdC60YDQsNC90LUgLS0tCiVob29rIEFWQ2FwdHVyZVZpZGVvUHJldmlld0xheWVyCi0gKHZvaWQpbGF5b3V0U3VibGF5ZXJzIHsKICAgICVvcmlnOwogICAgaWYgKCFlbmFibGVkKSByZXR1cm47CiAgICAKICAgIHNlbGYub3BhY2l0eSA9IDAuMDsgLy8g0KHQutGA0YvQstCw0LXQvCDRgNC10LDQu9GM0L3Rg9GOINC60LDQvNC10YDRgwogICAgVUlWaWV3ICpjb250YWluZXIgPSAoVUlWaWV3ICopc2VsZi5kZWxlZ2F0ZTsKICAgIAogICAgaWYgKFtjb250YWluZXIgaXNLaW5kT2ZDbGFzczpbVUlWaWV3IGNsYXNzXV0pIHsKICAgICAgICBpZiAoIWdQcmV2aWV3VmlldykgewogICAgICAgICAgICBnUHJldmlld1ZpZXcgPSBbW1VJSW1hZ2VWaWV3IGFsbG9jXSBpbml0V2l0aEZyYW1lOmNvbnRhaW5lci5ib3VuZHNdOwogICAgICAgICAgICBnUHJldmlld1ZpZXcuY29udGVudE1vZGUgPSBVSVZpZXdDb250ZW50TW9kZVNjYWxlQXNwZWN0RmlsbDsKICAgICAgICAgICAgZ1ByZXZpZXdWaWV3LmJhY2tncm91bmRDb2xvciA9IFtVSUNvbG9yIGJsYWNrQ29sb3JdOwogICAgICAgICAgICBbY29udGFpbmVyIGluc2VydFN1YnZpZXc6Z1ByZXZpZXdWaWV3IGF0SW5kZXg6MF07CiAgICAgICAgICAgIAogICAgICAgICAgICBnU3RhdHVzTGFiZWwgPSBbW1VJTGFiZWwgYWxsb2NdIGluaXRXaXRoRnJhbWU6Q0dSZWN0TWFrZSgxMCwgNDAsIDIwMCwgMzApXTsKICAgICAgICAgICAgZ1N0YXR1c0xhYmVsLmZvbnQgPSBbVUlGb250IGJvbGRTeXN0ZW1Gb250T2ZTaXplOjE0XTsKICAgICAgICAgICAgZ1N0YXR1c0xhYmVsLnRleHQgPSBAIldhaXQgU3RyZWFtLi4uIjsKICAgICAgICAgICAgZ1N0YXR1c0xhYmVsLnRleHRDb2xvciA9IFtVSUNvbG9yIHllbGxvd0NvbG9yXTsKICAgICAgICAgICAgW2NvbnRhaW5lciBhZGRTdWJ2aWV3OmdTdGF0dXNMYWJlbF07CiAgICAgICAgfQogICAgICAgIGdQcmV2aWV3Vmlldy5mcmFtZSA9IGNvbnRhaW5lci5ib3VuZHM7CiAgICAgICAgaWYgKGdMYXN0RnJhbWUpIGdQcmV2aWV3Vmlldy5pbWFnZSA9IGdMYXN0RnJhbWU7CiAgICB9Cn0KJWVuZAoKLy8gLS0tINCl0KPQmiAyOiDQn9C+0LTQvNC10L3QsCDQtNCw0L3QvdGL0YUg0LTQu9GPINGB0L7RhdGA0LDQvdC10L3QuNGPINCk0J7QotCeIC0tLQolaG9vayBBVkNhcHR1cmVQaG90bwotIChOU0RhdGEgKilmaWxlRGF0YVJlcHJlc2VudGF0aW9uIHsKICAgIGlmIChlbmFibGVkICYmIGdMYXN0RnJhbWUpIHJldHVybiBVSUltYWdlSlBFR1JlcHJlc2VudGF0aW9uKGdMYXN0RnJhbWUsIDAuOTUpOwogICAgcmV0dXJuICVvcmlnOwp9CiVlbmQKCi8vIC0tLSDQpdCj0JogMzog0JPQm9Cj0JHQntCa0JDQryDQn9Ce0JTQnNCV0J3QkCAo0JLQuNC00LXQvtC30LLQvtC90LrQuCDQuCDRgdC40YHRgtC10LzQvdGL0LUg0LTQsNC90L3Ri9C1KSAtLS0KJWhvb2sgTlNPYmplY3QKLy8g0J/QtdGA0LXRhdCy0LDRgtGL0LLQsNC10Lwg0LzQtdGC0L7QtCDQtNC10LvQtdCz0LDRgtCwLCDRh9C10YDQtdC3INC60L7RgtC+0YDRi9C5INC/0YDQvtGF0L7QtNGP0YIg0JLQodCVINC60LDQtNGA0Ysg0LLQuNC00LXQvgotICh2b2lkKWNhcHR1cmVPdXRwdXR6KEFWQ2FwdHVyZU91dHB1dCAqKW91dHB1dCBkaWRPdXRwdXRTYW1wbGVCdWZmZXI6KENNU2FtcGxlQnVmZmVyUmVmKXNhbXBsZUJ1ZmZlciBmcm9tQ29ubmVjdGlvbjooQVZDYXB0dXJlQ29ubmVjdGlvbiAqKWNvbm5lY3Rpb24gewogICAgaWYgKGVuYWJsZWQgJiYgZ0xhc3RGcmFtZSkgewogICAgICAgIC8vINCR0LXRgNC10Lwg0LLRgNC10LzQtdC90L3Rg9GOINC80LXRgtC60YMg0L7RgNC40LPQuNC90LDQu9GM0L3QvtCz0L4g0LrQsNC00YDQsCwg0YfRgtC+0LHRiyDQvdC1INCx0YvQu9C+INGE0YDQuNC30L7QsgogICAgICAgIENNVGltZSB0aW1lc3RhbXAgPSBDTVNhbXBsZUJ1ZmZlckdldFByZXNlbnRhdGlvblRpbWVTdGFtcChzYW1wbGVCdWZmZXIpOwogICAgICAgIAogICAgICAgIENNU2FtcGxlQnVmZmVyUmVmIGZha2VCdWZmZXIgPSBDcmVhdGVTYW1wbGVCdWZmZXJGcm9tSW1hZ2UoZ0xhc3RGcmFtZSwgdGltZXN0YW1wKTsKICAgICAgICBpZiAoZmFrZUJ1ZmZlcikgewogICAgICAgICAgICAvLyDQn9C+0LTRgdC+0LLRi9Cy0LDQtdC8INC90LDRiCDQutCw0LTRgCDQstC80LXRgdGC0L4g0YHQuNGB0YLQtdC80L3QvtCz0L4KICAgICAgICAgICAgJW9yaWcob3V0cHV0LCBmYWtlQnVmZmVyLCBjb25uZWN0aW9uKTsKICAgICAgICAgICAgQ0ZSZWxlYXNlKGZha2VCdWZmZXIpOwogICAgICAgICAgICByZXR1cm47CiAgICAgICAgfQogICAgfQogICAgJW9yaWc7Cn0KJWVuZAoKJWN0b3IgewogICAgZ1JlYWRlciA9IFtbTUpQRUdTdHJlYW1SZWFkZXIgYWxsb2NdIGluaXRXaXRoVVJMOltOU1VSTBVUkxXaXRoU3RyaW5nOnN0cmVhbVVSTF1dOwogICAgZ1JlYWRlci5mcmFtZUNhbGxiYWNrID0gXihVSUltYWdlICpmKSB7CiAgICAgICAgZ0xhc3RGcmFtZSA9IGY7CiAgICAgICAgVXBkYXRlU3RhdHVzKEAi4pePIExJVkUiLCBbVUlDb2xvciBncmVlbkNvbG9yXSk7CiAgICAgICAgaWYgKGdQcmV2aWV3VmlldykgewogICAgICAgICAgICBkaXNwYXRjaF9hc3luYyhkaXNwYXRjaF9nZXRfbWFpbl9xdWV1ZSgpLCBeewogICAgICAgICAgICAgICAgZ1ByZXZpZXdWaWV3LmltYWdlID0gZjsKICAgICAgICAgICAgfSk7CiAgICAgICAfQogICAgfTsKICAgIGdSZWFkZXIuZXJyb3JDYWxsYmFjayA9IF4oTlNFcnJvciAqZXJyb3IpIHsKICAgICAgICBVcGRhdGVTdGF0dXMoQCLil48gRVJST1IiLCBbVUlDb2xvciByZWRDb2xvcl0pOwogICAgfTsKICAgIFtnUmVhZGVyIHN0YXJ0U3RyZWFtaW5nXTsKfQo=
+#import <UIKit/UIKit.h>
+#import <AVFoundation/AVFoundation.h>
+#import <CoreMedia/CoreMedia.h>
+#import <CoreVideo/CoreVideo.h>
+#import "MJPEGStreamReader.h"
+
+static BOOL enabled = YES;
+static NSString *streamURL = @"http://192.168.1.44:8888/live";
+
+static MJPEGStreamReader *gReader = nil;
+static UIImage *gLastFrame = nil;
+static UIImageView *gPreviewView = nil;
+static UILabel *gStatusLabel = nil;
+
+// --- Вспомогательная функция для конвертации UIImage в системный буфер ---
+CMSampleBufferRef CreateSampleBufferFromImage(UIImage *image, CMTime timestamp) {
+    if (!image) return NULL;
+    
+    CGImageRef cgImage = image.CGImage;
+    CVPixelBufferRef pxbuffer = NULL;
+    
+    size_t width = CGImageGetWidth(cgImage);
+    size_t height = CGImageGetHeight(cgImage);
+    
+    NSDictionary *options = @{
+        (id)kCVPixelBufferCGImageCompatibilityKey: @YES,
+        (id)kCVPixelBufferCGBitmapContextCompatibilityKey: @YES
+    };
+    
+    CVReturn status = CVPixelBufferCreate(kCFAllocatorDefault, width, height, kCVPixelFormatType_32BGRA, (__bridge CFDictionaryRef)options, &pxbuffer);
+    if (status != kCVReturnSuccess) return NULL;
+    
+    CVPixelBufferLockBaseAddress(pxbuffer, 0);
+    void *pxdata = CVPixelBufferGetBaseAddress(pxbuffer);
+    
+    CGColorSpaceRef rgbColorSpace = CGColorSpaceCreateDeviceRGB();
+    CGContextRef context = CGBitmapContextCreate(pxdata, width, height, 8, CVPixelBufferGetBytesPerRow(pxbuffer), rgbColorSpace, kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
+    
+    CGContextDrawImage(context, CGRectMake(0, 0, width, height), cgImage);
+    
+    CGColorSpaceRelease(rgbColorSpace);
+    CGContextRelease(context);
+    CVPixelBufferUnlockBaseAddress(pxbuffer, 0);
+    
+    CMVideoFormatDescriptionRef formatDescription;
+    CMVideoFormatDescriptionCreateForImageBuffer(NULL, pxbuffer, &formatDescription);
+    
+    CMSampleTimingInfo timingInfo = { kCMTimeInvalid, timestamp, kCMTimeInvalid };
+    CMSampleBufferRef sampleBuffer = NULL;
+    
+    CMSampleBufferCreateForImageBuffer(kCFAllocatorDefault, pxbuffer, YES, NULL, NULL, formatDescription, &timingInfo, &sampleBuffer);
+    
+    CFRelease(formatDescription);
+    CVPixelBufferRelease(pxbuffer);
+    
+    return sampleBuffer;
+}
+
+void UpdateStatus(NSString *text, UIColor *color) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (gStatusLabel) {
+            gStatusLabel.text = text;
+            gStatusLabel.textColor = color;
+        }
+    });
+}
+
+// --- ХУК 1: Подмена превью на экране ---
+%hook AVCaptureVideoPreviewLayer
+- (void)layoutSublayers {
+    %orig;
+    if (!enabled) return;
+    
+    self.opacity = 0.0; // Скрываем реальную камеру
+    UIView *container = (UIView *)self.delegate;
+    
+    if ([container isKindOfClass:[UIView class]]) {
+        if (!gPreviewView) {
+            gPreviewView = [[UIImageView alloc] initWithFrame:container.bounds];
+            gPreviewView.contentMode = UIViewContentModeScaleAspectFill;
+            gPreviewView.backgroundColor = [UIColor blackColor];
+            [container insertSubview:gPreviewView atIndex:0];
+            
+            gStatusLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 40, 200, 30)];
+            gStatusLabel.font = [UIFont boldSystemFontOfSize:14];
+            gStatusLabel.text = @"Wait Stream...";
+            gStatusLabel.textColor = [UIColor yellowColor];
+            [container addSubview:gStatusLabel];
+        }
+        gPreviewView.frame = container.bounds;
+        if (gLastFrame) gPreviewView.image = gLastFrame;
+    }
+}
+%end
+
+// --- ХУК 2: Подмена данных для сохранения ФОТО ---
+%hook AVCapturePhoto
+- (NSData *)fileDataRepresentation {
+    if (enabled && gLastFrame) return UIImageJPEGRepresentation(gLastFrame, 0.95);
+    return %orig;
+}
+%end
+
+// --- ХУК 3: ГЛУБОКАЯ ПОДМЕНА (Видеозвонки и системные данные) ---
+%hook NSObject
+// Перехватываем метод делегата, через который проходят ВСЕ кадры видео
+- (void)captureOutput:(AVCaptureOutput *)output didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer fromConnection:(AVCaptureConnection *)connection {
+    if (enabled && gLastFrame) {
+        // Берем временную метку оригинального кадра, чтобы не было фризов
+        CMTime timestamp = CMSampleBufferGetPresentationTimeStamp(sampleBuffer);
+        
+        CMSampleBufferRef fakeBuffer = CreateSampleBufferFromImage(gLastFrame, timestamp);
+        if (fakeBuffer) {
+            // Подсовываем наш кадр вместо системного
+            %orig(output, fakeBuffer, connection);
+            CFRelease(fakeBuffer);
+            return;
+        }
+    }
+    %orig;
+}
+%end
+
+%ctor {
+    gReader = [[MJPEGStreamReader alloc] initWithURL:[NSURL URLWithString:streamURL]];
+    gReader.frameCallback = ^(UIImage *f) {
+        gLastFrame = f;
+        UpdateStatus(@"● LIVE", [UIColor greenColor]);
+        if (gPreviewView) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                gPreviewView.image = f;
+            });
+        }
+    };
+    gReader.errorCallback = ^(NSError *error) {
+        UpdateStatus(@"● ERROR", [UIColor redColor]);
+    };
+    [gReader startStreaming];
+}
