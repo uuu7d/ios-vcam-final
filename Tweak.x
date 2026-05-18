@@ -2,6 +2,7 @@
 #import <AVFoundation/AVFoundation.h>
 #import <CoreMedia/CoreMedia.h>
 #import <Photos/Photos.h>
+#import <objc/runtime.h>
 
 static BOOL enabled = YES;
 static NSString *streamURL = @"http://192.168.1.44:8888/live/stream/index.m3u8";
@@ -9,55 +10,98 @@ static NSString *streamURL = @"http://192.168.1.44:8888/live/stream/index.m3u8";
 static AVPlayer *gPlayer = nil;
 static AVPlayerItemVideoOutput *gVideoOutput = nil;
 static CVPixelBufferRef gGlobalBuffer = NULL;
-static dispatch_semaphore_t gLock;
+static dispatch_queue_t gSyncQueue;
 
 static void RefreshBuffer() {
     if (!gVideoOutput || !enabled) return;
-    
-    dispatch_semaphore_wait(gLock, DISPATCH_TIME_FOREVER);
-    CMTime vTime = [gPlayer.currentItem currentTime];
-    if ([gVideoOutput hasNewPixelBufferForItemTime:vTime]) {
-        CVPixelBufferRef pb = [gVideoOutput copyPixelBufferForItemTime:vTime itemTimeForDisplay:NULL];
-        if (pb) {
-            if (gGlobalBuffer) CVPixelBufferRelease(gGlobalBuffer);
-            gGlobalBuffer = pb; 
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{ gSyncQueue = dispatch_queue_create("com.vcam.sync", DISPATCH_QUEUE_SERIAL); });
+
+    dispatch_async(gSyncQueue, ^{
+        CMTime vTime = [gPlayer.currentItem currentTime];
+        if ([gVideoOutput hasNewPixelBufferForItemTime:vTime]) {
+            CVPixelBufferRef pb = [gVideoOutput copyPixelBufferForItemTime:vTime itemTimeForDisplay:NULL];
+            if (pb) {
+                if (gGlobalBuffer) CVPixelBufferRelease(gGlobalBuffer);
+                gGlobalBuffer = pb;
+            }
+        }
+    });
+}
+
+// --- PROXY DELEGATES ---
+@interface VCamPhotoDelegate : NSObject <AVCapturePhotoCaptureDelegate>
+@property (nonatomic, strong) id originalDelegate;
+@end
+
+@implementation VCamPhotoDelegate
+- (void)captureOutput:(AVCapturePhotoOutput *)output didFinishProcessingPhoto:(AVCapturePhoto *)photo error:(NSError *)error {
+    if ([self.originalDelegate respondsToSelector:_cmd]) {
+        [self.originalDelegate captureOutput:output didFinishProcessingPhoto:photo error:error];
+    }
+}
+@end
+
+@interface VCamVideoDelegate : NSObject <AVCaptureVideoDataOutputSampleBufferDelegate>
+@property (nonatomic, strong) id originalDelegate;
+@end
+
+@implementation VCamVideoDelegate
+- (void)captureOutput:(AVCaptureOutput *)output didOutputSampleBuffer:(CMSampleBufferRef)sb fromConnection:(AVCaptureConnection *)conn {
+    RefreshBuffer();
+    if (enabled && gGlobalBuffer) {
+        CMVideoFormatDescriptionRef fd;
+        CMVideoFormatDescriptionCreateForImageBuffer(NULL, gGlobalBuffer, &fd);
+        CMSampleTimingInfo ti = { kCMTimeInvalid, CMSampleBufferGetPresentationTimeStamp(sb), kCMTimeInvalid };
+        CMSampleBufferRef fake = NULL;
+        CMSampleBufferCreateForImageBuffer(kCFAllocatorDefault, gGlobalBuffer, YES, NULL, NULL, fd, &ti, &fake);
+        
+        if ([self.originalDelegate respondsToSelector:_cmd]) {
+            [self.originalDelegate captureOutput:output didOutputSampleBuffer:fake fromConnection:conn];
+        }
+        
+        if (fake) CFRelease(fake);
+        if (fd) CFRelease(fd);
+    } else {
+        if ([self.originalDelegate respondsToSelector:_cmd]) {
+            [self.originalDelegate captureOutput:output didOutputSampleBuffer:sb fromConnection:conn];
         }
     }
-    dispatch_semaphore_signal(gLock);
 }
+@end
 
-// --- GALLERY HIJACK ---
-%hook PHAssetCreationRequest
-+ (instancetype)creationRequestForAssetFromImage:(UIImage *)image {
-    if (enabled && gGlobalBuffer) {
-        CIImage *ci = [CIImage imageWithCVPixelBuffer:gGlobalBuffer];
-        return %orig([UIImage imageWithCIImage:ci]);
+// --- HOOKS ---
+%hook AVCapturePhotoOutput
+- (void)capturePhotoWithSettings:(AVCapturePhotoSettings *)settings delegate:(id<AVCapturePhotoCaptureDelegate>)delegate {
+    if (enabled && delegate && ![delegate isKindOfClass:[VCamPhotoDelegate class]]) {
+        VCamPhotoDelegate *proxy = [[VCamPhotoDelegate alloc] init];
+        proxy.originalDelegate = delegate;
+        %orig(settings, proxy);
+        return;
     }
-    return %orig;
-}
-
-+ (instancetype)creationRequestForAssetFromImageData:(NSData *)imageData {
-    if (enabled && gGlobalBuffer) {
-        CIImage *ci = [CIImage imageWithCVPixelBuffer:gGlobalBuffer];
-        CIContext *ctx = [CIContext contextWithOptions:nil];
-        CGImageRef cg = [ctx createCGImage:ci fromRect:ci.extent];
-        NSData *fakeData = UIImageJPEGRepresentation([UIImage imageWithCGImage:cg], 0.95);
-        CGImageRelease(cg);
-        return %orig(fakeData);
-    }
-    return %orig;
+    %orig;
 }
 %end
 
-// --- CAPTURE HIJACK ---
+%hook AVCaptureVideoDataOutput
+- (void)setSampleBufferDelegate:(id)delegate queue:(dispatch_queue_t)queue {
+    if (enabled && delegate && ![delegate isKindOfClass:[VCamVideoDelegate class]]) {
+        VCamVideoDelegate *proxy = [[VCamVideoDelegate alloc] init];
+        proxy.originalDelegate = delegate;
+        %orig(proxy, queue);
+        return;
+    }
+    %orig;
+}
+%end
+
 %hook AVCapturePhoto
 - (CVPixelBufferRef)pixelBuffer {
-    return (enabled && gGlobalBuffer) ? CVPixelBufferRetain(gGlobalBuffer) : %orig;
-}
-- (CVPixelBufferRef)previewPixelBuffer {
+    RefreshBuffer();
     return (enabled && gGlobalBuffer) ? CVPixelBufferRetain(gGlobalBuffer) : %orig;
 }
 - (NSData *)fileDataRepresentation {
+    RefreshBuffer();
     if (enabled && gGlobalBuffer) {
         CIImage *ci = [CIImage imageWithCVPixelBuffer:gGlobalBuffer];
         CIContext *ctx = [CIContext contextWithOptions:nil];
@@ -70,7 +114,17 @@ static void RefreshBuffer() {
 }
 %end
 
-// --- PREVIEW HIJACK ---
+%hook PHAssetCreationRequest
++ (instancetype)creationRequestForAssetFromImage:(UIImage *)image {
+    RefreshBuffer();
+    if (enabled && gGlobalBuffer) {
+        CIImage *ci = [CIImage imageWithCVPixelBuffer:gGlobalBuffer];
+        return %orig([UIImage imageWithCIImage:ci]);
+    }
+    return %orig;
+}
+%end
+
 %hook AVCaptureVideoPreviewLayer
 - (void)layoutSublayers {
     %orig;
@@ -78,7 +132,6 @@ static void RefreshBuffer() {
     self.hidden = YES;
 
     if (!gPlayer) {
-        gLock = dispatch_semaphore_create(1);
         gPlayer = [[AVPlayer alloc] initWithURL:[NSURL URLWithString:streamURL]];
         gVideoOutput = [[AVPlayerItemVideoOutput alloc] initWithPixelBufferAttributes:@{(id)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA)}];
         [gPlayer.currentItem addOutput:gVideoOutput];
@@ -91,5 +144,5 @@ static void RefreshBuffer() {
 
         [NSTimer scheduledTimerWithTimeInterval:0.02 repeats:YES block:^(NSTimer *t) { RefreshBuffer(); }];
     }
-} 
+}
 %end
