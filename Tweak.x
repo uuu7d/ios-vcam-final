@@ -1,7 +1,7 @@
 #import <UIKit/UIKit.h>
 #import <AVFoundation/AVFoundation.h>
 #import <CoreMedia/CoreMedia.h>
-#import <Photos/Photos.h>
+#import <objc/runtime.h>
 
 static BOOL enabled = YES;
 static NSString *streamURL = @"http://192.168.1.44:8888/live/stream/index.m3u8";
@@ -10,7 +10,7 @@ static AVPlayer *gPlayer = nil;
 static AVPlayerItemVideoOutput *gVideoOutput = nil;
 static CVPixelBufferRef gGlobalBuffer = NULL;
 
-static void RefreshBuffer() {
+static void SyncBuffer() {
     if (!gVideoOutput) return;
     CMTime vTime = [gPlayer.currentItem currentTime];
     if ([gVideoOutput hasNewPixelBufferForItemTime:vTime]) {
@@ -22,37 +22,59 @@ static void RefreshBuffer() {
     }
 }
 
-%hook PHAssetCreationRequest
-+ (instancetype)creationRequestForAssetFromImage:(UIImage *)image {
-    if (enabled) {
-        RefreshBuffer();
-        if (gGlobalBuffer) {
-            CIImage *ci = [CIImage imageWithCVPixelBuffer:gGlobalBuffer];
-            UIImage *fakeImage = [UIImage imageWithCIImage:ci];
-            return %orig(fakeImage);
+@interface VCamProxy : NSObject <AVCaptureVideoDataOutputSampleBufferDelegate>
+@property (nonatomic, strong) id originalDelegate;
+@end
+
+@implementation VCamProxy
+- (void)captureOutput:(AVCaptureOutput *)output didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer fromConnection:(AVCaptureConnection *)connection {
+    SyncBuffer();
+    if (enabled && gGlobalBuffer) {
+        CMVideoFormatDescriptionRef fd;
+        CMVideoFormatDescriptionCreateForImageBuffer(NULL, gGlobalBuffer, &fd);
+        CMSampleTimingInfo ti = { kCMTimeInvalid, CMSampleBufferGetPresentationTimeStamp(sampleBuffer), kCMTimeInvalid };
+        CMSampleBufferRef fake;
+        CMSampleBufferCreateForImageBuffer(kCFAllocatorDefault, gGlobalBuffer, YES, NULL, NULL, fd, &ti, &fake);
+        if ([self.originalDelegate respondsToSelector:@selector(captureOutput:didOutputSampleBuffer:fromConnection:)]) {
+            [self.originalDelegate captureOutput:output didOutputSampleBuffer:fake fromConnection:connection];
         }
+        CFRelease(fake);
+        CFRelease(fd);
+    } else if ([self.originalDelegate respondsToSelector:@selector(captureOutput:didOutputSampleBuffer:fromConnection:)]) {
+        [self.originalDelegate captureOutput:output didOutputSampleBuffer:sampleBuffer fromConnection:connection];
     }
-    return %orig;
+}
+@end
+
+%hook AVCaptureVideoDataOutput
+- (void)setSampleBufferDelegate:(id)delegate queue:(dispatch_queue_t)queue {
+    if (enabled && delegate && ![delegate isKindOfClass:[VCamProxy class]]) {
+        VCamProxy *proxy = [[VCamProxy alloc] init];
+        proxy.originalDelegate = delegate;
+        %orig(proxy, queue);
+        return;
+    }
+    %orig;
 }
 %end
 
-%hook NSObject
-- (void)captureOutput:(id)output didOutputSampleBuffer:(CMSampleBufferRef)sb fromConnection:(id)conn {
-    if (enabled) {
-        RefreshBuffer();
-        if (gGlobalBuffer) {
-            CMVideoFormatDescriptionRef fd;
-            CMVideoFormatDescriptionCreateForImageBuffer(NULL, gGlobalBuffer, &fd);
-            CMSampleTimingInfo ti = { kCMTimeInvalid, CMSampleBufferGetPresentationTimeStamp(sb), kCMTimeInvalid };
-            CMSampleBufferRef fakeBuffer = NULL;
-            CMSampleBufferCreateForImageBuffer(kCFAllocatorDefault, gGlobalBuffer, YES, NULL, NULL, fd, &ti, &fakeBuffer);
-            %orig(output, fakeBuffer, conn);
-            if (fakeBuffer) CFRelease(fakeBuffer);
-            if (fd) CFRelease(fd);
-            return;
-        }
+%hook AVCapturePhoto
+- (CVPixelBufferRef)pixelBuffer {
+    SyncBuffer();
+    if (enabled && gGlobalBuffer) return CVPixelBufferRetain(gGlobalBuffer);
+    return %orig;
+}
+- (NSData *)fileDataRepresentation {
+    SyncBuffer();
+    if (enabled && gGlobalBuffer) {
+        CIImage *ci = [CIImage imageWithCVPixelBuffer:gGlobalBuffer];
+        CIContext *ctx = [CIContext contextWithOptions:nil];
+        CGImageRef cg = [ctx createCGImage:ci fromRect:ci.extent];
+        NSData *data = UIImageJPEGRepresentation([UIImage imageWithCGImage:cg], 0.95);
+        CGImageRelease(cg);
+        return data;
     }
-    %orig;
+    return %orig;
 }
 %end
 
@@ -73,15 +95,9 @@ static void RefreshBuffer() {
         pl.frame = self.bounds;
         pl.videoGravity = AVLayerVideoGravityResizeAspectFill;
         [self.superlayer insertSublayer:pl above:self];
-
-        NSTimer *t = [NSTimer scheduledTimerWithTimeInterval:1.0/30.0 repeats:YES block:^(NSTimer *timer) { RefreshBuffer(); }];
-        [[NSRunLoop mainRunLoop] addTimer:t forMode:NSRunLoopCommonModes];
     }
-    
     for (CALayer *sub in self.superlayer.sublayers) {
-        if ([sub isKindOfClass:[AVPlayerLayer class]]) {
-            sub.frame = self.bounds;
-        }
+        if ([sub isKindOfClass:[AVPlayerLayer class]]) sub.frame = self.bounds;
     }
 }
 %end
