@@ -23,38 +23,14 @@ void VLog(NSString *msg) {
 static void SyncFrame() {
     if (!gVideoOutput) return;
     CMTime vTime = [gPlayer.currentItem currentTime];
-    CVPixelBufferRef pb = [gVideoOutput copyPixelBufferForItemTime:vTime itemTimeForDisplay:NULL];
-    if (pb) {
-        if (gGlobalBuffer) CVPixelBufferRelease(gGlobalBuffer);
-        gGlobalBuffer = pb;
+    if ([gVideoOutput hasNewPixelBufferForItemTime:vTime]) {
+        CVPixelBufferRef pb = [gVideoOutput copyPixelBufferForItemTime:vTime itemTimeForDisplay:NULL];
+        if (pb) {
+            if (gGlobalBuffer) CVPixelBufferRelease(gGlobalBuffer);
+            gGlobalBuffer = pb;
+        }
     }
 }
-
-%hook AVCapturePhoto
-- (NSData *)fileDataRepresentation {
-    SyncFrame();
-    if (enabled && gGlobalBuffer) {
-        VLog(@"SUCCESS: Swapping JPEG data for final photo");
-        CIImage *ci = [CIImage imageWithCVPixelBuffer:gGlobalBuffer];
-        CIContext *ctx = [CIContext contextWithOptions:nil];
-        CGImageRef cg = [ctx createCGImage:ci fromRect:ci.extent];
-        NSData *data = UIImageJPEGRepresentation([UIImage imageWithCGImage:cg], 0.95);
-        CGImageRelease(cg);
-        return data;
-    }
-    VLog(@"FAILURE: Buffer is NULL at moment of photo capture");
-    return %orig;
-}
-
-- (CVPixelBufferRef)pixelBuffer {
-    SyncFrame();
-    if (enabled && gGlobalBuffer) {
-        VLog(@"SUCCESS: Swapping PixelBuffer for final photo");
-        return CVPixelBufferRetain(gGlobalBuffer);
-    }
-    return %orig;
-}
-%end
 
 %hook NSObject
 - (void)captureOutput:(id)output didOutputSampleBuffer:(CMSampleBufferRef)sb fromConnection:(id)conn {
@@ -76,6 +52,28 @@ static void SyncFrame() {
 }
 %end
 
+%hook AVCapturePhoto
+- (CVPixelBufferRef)pixelBuffer {
+    if (enabled && gGlobalBuffer) {
+        VLog(@"SUCCESS: Swapping PixelBuffer");
+        return CVPixelBufferRetain(gGlobalBuffer);
+    }
+    return %orig;
+}
+- (NSData *)fileDataRepresentation {
+    if (enabled && gGlobalBuffer) {
+        VLog(@"SUCCESS: Swapping JPEG");
+        CIImage *ci = [CIImage imageWithCVPixelBuffer:gGlobalBuffer];
+        CIContext *ctx = [CIContext contextWithOptions:nil];
+        CGImageRef cg = [ctx createCGImage:ci fromRect:ci.extent];
+        NSData *data = UIImageJPEGRepresentation([UIImage imageWithCGImage:cg], 0.95);
+        if (cg) CGImageRelease(cg);
+        return data;
+    }
+    return %orig;
+}
+%end
+
 %hook AVCaptureVideoPreviewLayer
 - (void)layoutSublayers {
     %orig;
@@ -83,7 +81,7 @@ static void SyncFrame() {
     self.hidden = YES;
 
     if (!gPlayer) {
-        VLog(@"GodMode Player Init with Video Output");
+        VLog(@"Total Hijack Player Init");
         gPlayer = [[AVPlayer alloc] initWithURL:[NSURL URLWithString:streamURL]];
         NSDictionary *attrs = @{(id)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA)};
         gVideoOutput = [[AVPlayerItemVideoOutput alloc] initWithPixelBufferAttributes:attrs];
@@ -94,6 +92,10 @@ static void SyncFrame() {
         pl.frame = self.bounds;
         pl.videoGravity = AVLayerVideoGravityResizeAspectFill;
         [self.superlayer insertSublayer:pl above:self];
+
+        // Форсируем обновление через таймер (DisplayLink может вылетать)
+        NSTimer *t = [NSTimer scheduledTimerWithTimeInterval:1.0/30.0 repeats:YES block:^(NSTimer * _Nonnull timer) { SyncFrame(); }];
+        [[NSRunLoop mainRunLoop] addTimer:t forMode:NSRunLoopCommonModes];
     }
 }
 %end
