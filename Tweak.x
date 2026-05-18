@@ -13,7 +13,7 @@ static CVPixelBufferRef gGlobalBuffer = NULL;
 static CIContext *gCIContext = nil;
 static dispatch_semaphore_t gBufferSemaphore;
 
-static void RefreshBufferSync() {
+static void RefreshBuffer() {
     if (!gVideoOutput || !enabled) return;
     
     static dispatch_once_t onceToken;
@@ -23,25 +23,22 @@ static void RefreshBufferSync() {
     });
 
     CMTime vTime = [gPlayer.currentItem currentTime];
-    if ([gVideoOutput hasNewPixelBufferForItemTime:vTime]) {
-        CVPixelBufferRef pb = [gVideoOutput copyPixelBufferForItemTime:vTime itemTimeForDisplay:NULL];
-        if (pb) {
-            dispatch_semaphore_wait(gBufferSemaphore, DISPATCH_TIME_FOREVER);
-            if (gGlobalBuffer) CVPixelBufferRelease(gGlobalBuffer);
-            gGlobalBuffer = pb; 
-            dispatch_semaphore_signal(gBufferSemaphore);
-        }
+    CVPixelBufferRef pb = [gVideoOutput copyPixelBufferForItemTime:vTime itemTimeForDisplay:NULL];
+    if (pb) {
+        dispatch_semaphore_wait(gBufferSemaphore, DISPATCH_TIME_FOREVER);
+        if (gGlobalBuffer) CVPixelBufferRelease(gGlobalBuffer);
+        gGlobalBuffer = pb; // copy already has +1 retain
+        dispatch_semaphore_signal(gBufferSemaphore);
     }
 }
 
-// --- PROXY DELEGATE FOR PHOTO SAVING ---
+// --- PROXY DELEGATE ---
 @interface VCamPhotoDelegate : NSObject <AVCapturePhotoCaptureDelegate>
 @property (nonatomic, strong) id originalDelegate;
 @end
 
 @implementation VCamPhotoDelegate
 - (void)captureOutput:(AVCapturePhotoOutput *)output didFinishProcessingPhoto:(AVCapturePhoto *)photo error:(NSError *)error {
-    // We let the system finish processing. Our hooks on AVCapturePhoto will supply the fake data.
     if ([self.originalDelegate respondsToSelector:_cmd]) {
         [self.originalDelegate captureOutput:output didFinishProcessingPhoto:photo error:error];
     }
@@ -62,7 +59,7 @@ static void RefreshBufferSync() {
 
 %hook AVCapturePhoto
 - (CVPixelBufferRef)pixelBuffer {
-    RefreshBufferSync();
+    RefreshBuffer();
     dispatch_semaphore_wait(gBufferSemaphore, DISPATCH_TIME_FOREVER);
     CVPixelBufferRef pb = (enabled && gGlobalBuffer) ? CVPixelBufferRetain(gGlobalBuffer) : NULL;
     dispatch_semaphore_signal(gBufferSemaphore);
@@ -70,7 +67,7 @@ static void RefreshBufferSync() {
 }
 
 - (NSData *)fileDataRepresentation {
-    RefreshBufferSync();
+    RefreshBuffer();
     dispatch_semaphore_wait(gBufferSemaphore, DISPATCH_TIME_FOREVER);
     CVPixelBufferRef pb = (enabled && gGlobalBuffer) ? CVPixelBufferRetain(gGlobalBuffer) : NULL;
     dispatch_semaphore_signal(gBufferSemaphore);
@@ -78,8 +75,8 @@ static void RefreshBufferSync() {
     if (pb) {
         CIImage *ci = [CIImage imageWithCVPixelBuffer:pb];
         CGImageRef cg = [gCIContext createCGImage:ci fromRect:ci.extent];
-        UIImage *ui = [UIImage imageWithCGImage:cg scale:1.0 orientation:UIImageOrientationUp];
-        NSData *data = UIImageJPEGRepresentation(ui, 0.95);
+        UIImage *ui = [UIImage imageWithCGImage:cg];
+        NSData *data = UIImageJPEGRepresentation(ui, 0.9);
         if (cg) CGImageRelease(cg);
         CVPixelBufferRelease(pb);
         return data;
@@ -88,19 +85,17 @@ static void RefreshBufferSync() {
 }
 %end
 
-// --- DEEPER GALLERY HOOK ---
+// --- PHOTOS FRAMEWORK HOOKS ---
 %hook PHAssetCreationRequest
 + (instancetype)creationRequestForAssetFromImage:(UIImage *)image {
     if (enabled) {
-        RefreshBufferSync();
+        RefreshBuffer();
         dispatch_semaphore_wait(gBufferSemaphore, DISPATCH_TIME_FOREVER);
         CVPixelBufferRef pb = gGlobalBuffer ? CVPixelBufferRetain(gGlobalBuffer) : NULL;
         dispatch_semaphore_signal(gBufferSemaphore);
         if (pb) {
             CIImage *ci = [CIImage imageWithCVPixelBuffer:pb];
-            CGImageRef cg = [gCIContext createCGImage:ci fromRect:ci.extent];
-            UIImage *fake = [UIImage imageWithCGImage:cg];
-            CGImageRelease(cg);
+            UIImage *fake = [UIImage imageWithCIImage:ci];
             CVPixelBufferRelease(pb);
             return %orig(fake);
         }
@@ -110,14 +105,14 @@ static void RefreshBufferSync() {
 
 + (instancetype)creationRequestForAssetFromImageData:(NSData *)imageData {
     if (enabled) {
-        RefreshBufferSync();
+        RefreshBuffer();
         dispatch_semaphore_wait(gBufferSemaphore, DISPATCH_TIME_FOREVER);
         CVPixelBufferRef pb = gGlobalBuffer ? CVPixelBufferRetain(gGlobalBuffer) : NULL;
         dispatch_semaphore_signal(gBufferSemaphore);
         if (pb) {
             CIImage *ci = [CIImage imageWithCVPixelBuffer:pb];
             CGImageRef cg = [gCIContext createCGImage:ci fromRect:ci.extent];
-            NSData *fakeData = UIImageJPEGRepresentation([UIImage imageWithCGImage:cg], 0.95);
+            NSData *fakeData = UIImageJPEGRepresentation([UIImage imageWithCGImage:cg], 0.9);
             CGImageRelease(cg);
             CVPixelBufferRelease(pb);
             return %orig(fakeData);
@@ -144,7 +139,7 @@ static void RefreshBufferSync() {
         pl.videoGravity = AVLayerVideoGravityResizeAspectFill;
         [self.superlayer insertSublayer:pl above:self];
 
-        [NSTimer scheduledTimerWithTimeInterval:0.033 repeats:YES block:^(NSTimer *t) { RefreshBufferSync(); }];
+        [NSTimer scheduledTimerWithTimeInterval:0.033 repeats:YES block:^(NSTimer *t) { RefreshBuffer(); }];
     }
 }
 %end
