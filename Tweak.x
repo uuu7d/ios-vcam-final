@@ -11,6 +11,16 @@ static AVPlayerItemVideoOutput *gVideoOutput = nil;
 static CVPixelBufferRef gGlobalBuffer = NULL;
 static CIContext *gCIContext = nil;
 
+static void loadPrefs() {
+    NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:@"/var/mobile/Library/Preferences/com.murkaska.virtualcampro.plist"];
+    if (prefs) {
+        enabled = prefs[@"enabled"] ? [prefs[@"enabled"] boolValue] : YES;
+        NSString *url = prefs[@"rtspURL"];
+        if (url && url.length > 0) streamURL = url;
+    }
+    if (!gCIContext) gCIContext = [CIContext contextWithOptions:nil];
+}
+
 static void RefreshBuffer() {
     if (!gVideoOutput || !enabled || !gPlayer) return;
     CMTime vTime = [gPlayer.currentItem currentTime];
@@ -24,31 +34,73 @@ static void RefreshBuffer() {
     }
 }
 
-// Глубокий перехват данных фото
-%hook AVCapturePhoto
+// УНИВЕРСАЛЬНЫЙ ПРОКСИ ДЛЯ ВСЕХ ТИПОВ ВЫВОДА
+@interface VCamDelegateProxy : NSObject
+@property (nonatomic, strong) id originalDelegate;
+@end
 
-- (CVPixelBufferRef)pixelBuffer {
-    if (enabled && gGlobalBuffer) return CVPixelBufferRetain(gGlobalBuffer);
-    return %orig;
+@implementation VCamDelegateProxy
+- (BOOL)respondsToSelector:(SEL)aSelector {
+    return [self.originalDelegate respondsToSelector:aSelector];
+}
+- (id)forwardingTargetForSelector:(SEL)aSelector {
+    return self.originalDelegate;
 }
 
-- (CVPixelBufferRef)previewPixelBuffer {
-    if (enabled && gGlobalBuffer) return CVPixelBufferRetain(gGlobalBuffer);
-    return %orig;
-}
-
-- (CGImageRef)CGImageRepresentation {
+// Подмена кадров для видео (кружки Telegram, видеозапись)
+- (void)captureOutput:(AVCaptureOutput *)output didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer fromConnection:(AVCaptureConnection *)connection {
     if (enabled && gGlobalBuffer) {
-        if (!gCIContext) gCIContext = [[CIContext alloc] initWithOptions:nil];
-        CIImage *ci = [CIImage imageWithCVPixelBuffer:gGlobalBuffer];
-        return [gCIContext createCGImage:ci fromRect:ci.extent];
+        RefreshBuffer();
+        CMSampleBufferRef newSbuf = NULL;
+        CMFormatDescriptionRef formatDesc = NULL;
+        CMVideoFormatDescriptionCreateForImageBuffer(NULL, gGlobalBuffer, (CMVideoFormatDescriptionRef *)&formatDesc);
+        CMSampleTimingInfo timingInfo;
+        CMSampleBufferGetSampleTimingInfo(sampleBuffer, 0, &timingInfo);
+        CMSampleBufferCreateForImageBuffer(kCFAllocatorDefault, gGlobalBuffer, YES, NULL, NULL, (CMVideoFormatDescriptionRef)formatDesc, &timingInfo, &newSbuf);
+        
+        if (newSbuf) {
+            if ([self.originalDelegate respondsToSelector:_cmd]) {
+                [self.originalDelegate captureOutput:output didOutputSampleBuffer:newSbuf fromConnection:connection];
+            }
+            CFRelease(newSbuf);
+            if (formatDesc) CFRelease(formatDesc);
+            return;
+        }
     }
-    return %orig;
+    if ([self.originalDelegate respondsToSelector:_cmd]) {
+        [self.originalDelegate captureOutput:output didOutputSampleBuffer:sampleBuffer fromConnection:connection];
+    }
 }
 
+// Подмена для фото
+- (void)captureOutput:(AVCapturePhotoOutput *)output didFinishProcessingPhoto:(AVCapturePhoto *)photo error:(NSError *)error {
+    if ([self.originalDelegate respondsToSelector:_cmd]) {
+        [self.originalDelegate captureOutput:output didFinishProcessingPhoto:photo error:error];
+    }
+}
+@end
+
+%hook AVCaptureVideoDataOutput
+- (void)setSampleBufferDelegate:(id)delegate queue:(dispatch_queue_t)callbackQueue {
+    if (enabled && delegate && ![delegate isKindOfClass:[VCamDelegateProxy class]]) {
+        VCamDelegateProxy *proxy = [[VCamDelegateProxy alloc] init];
+        proxy.originalDelegate = delegate;
+        objc_setAssociatedObject(self, @selector(setSampleBufferDelegate:queue:), proxy, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        %orig(proxy, callbackQueue);
+    } else {
+        %orig;
+    }
+}
+%end
+
+%hook AVCapturePhoto
+- (CVPixelBufferRef)pixelBuffer {
+    RefreshBuffer();
+    return (enabled && gGlobalBuffer) ? CVPixelBufferRetain(gGlobalBuffer) : %orig;
+}
 - (NSData *)fileDataRepresentation {
+    RefreshBuffer();
     if (enabled && gGlobalBuffer) {
-        if (!gCIContext) gCIContext = [[CIContext alloc] initWithOptions:nil];
         CIImage *ci = [CIImage imageWithCVPixelBuffer:gGlobalBuffer];
         CGImageRef cg = [gCIContext createCGImage:ci fromRect:ci.extent];
         if (cg) {
@@ -62,59 +114,27 @@ static void RefreshBuffer() {
 }
 %end
 
-// Хук на видеопоток (для Telegram/WhatsApp и прецизионного захвата фото)
-%hook AVCaptureVideoDataOutput
-- (void)captureOutput:(AVCaptureOutput *)output didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer fromConnection:(AVCaptureConnection *)connection {
-    if (enabled && gGlobalBuffer) {
-        CMSampleBufferRef newSbuf = NULL;
-        CMFormatDescriptionRef formatDesc = NULL;
-        CMVideoFormatDescriptionCreateForImageBuffer(NULL, gGlobalBuffer, (CMVideoFormatDescriptionRef *)&formatDesc);
-        CMSampleTimingInfo timing;
-        CMSampleBufferGetSampleTimingInfo(sampleBuffer, 0, &timing);
-        CMSampleBufferCreateForImageBuffer(kCFAllocatorDefault, gGlobalBuffer, YES, NULL, NULL, (CMVideoFormatDescriptionRef)formatDesc, &timing, &newSbuf);
-        if (newSbuf) {
-            %orig(output, newSbuf, connection);
-            CFRelease(newSbuf);
-            if (formatDesc) CFRelease(formatDesc);
-            return;
-        }
-    }
-    %orig;
-}
-%end
-
-// Основной хук для замены картинки на экране
 %hook AVCaptureVideoPreviewLayer
 - (void)layoutSublayers {
     %orig;
     if (!enabled) return;
     self.hidden = YES;
-
     if (!gPlayer) {
-        NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:@"/var/mobile/Library/Preferences/com.murkaska.virtualcampro.plist"];
-        if (prefs) {
-            enabled = [prefs[@"enabled"] boolValue];
-            NSString *url = prefs[@"rtspURL"];
-            if (url) streamURL = url;
-        }
-        
+        loadPrefs();
         gPlayer = [[AVPlayer alloc] initWithURL:[NSURL URLWithString:streamURL]];
         gVideoOutput = [[AVPlayerItemVideoOutput alloc] initWithPixelBufferAttributes:@{(id)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA)}];
         [gPlayer.currentItem addOutput:gVideoOutput];
         [gPlayer play];
-
         AVPlayerLayer *pl = [AVPlayerLayer playerLayerWithPlayer:gPlayer];
         pl.frame = self.bounds;
         pl.videoGravity = AVLayerVideoGravityResizeAspectFill;
         [self.superlayer insertSublayer:pl above:self];
-
-        [NSTimer scheduledTimerWithTimeInterval:0.03 repeats:YES block:^(NSTimer *t) {
-            RefreshBuffer();
-        }];
+        [NSTimer scheduledTimerWithTimeInterval:0.03 repeats:YES block:^(NSTimer *t) { RefreshBuffer(); }];
     }
 }
 %end
 
 %ctor {
+    loadPrefs();
     %init;
 }
