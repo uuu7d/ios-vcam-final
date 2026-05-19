@@ -34,70 +34,30 @@ static void RefreshBuffer() {
     }
 }
 
-// УНИВЕРСАЛЬНЫЙ ПРОКСИ ДЛЯ ВСЕХ ТИПОВ ВЫВОДА
-@interface VCamDelegateProxy : NSObject
-@property (nonatomic, strong) id originalDelegate;
-@end
-
-@implementation VCamDelegateProxy
-- (BOOL)respondsToSelector:(SEL)aSelector {
-    return [self.originalDelegate respondsToSelector:aSelector];
-}
-- (id)forwardingTargetForSelector:(SEL)aSelector {
-    return self.originalDelegate;
-}
-
-// Подмена кадров для видео (кружки Telegram, видеозапись)
-- (void)captureOutput:(AVCaptureOutput *)output didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer fromConnection:(AVCaptureConnection *)connection {
-    if (enabled && gGlobalBuffer) {
-        RefreshBuffer();
-        CMSampleBufferRef newSbuf = NULL;
-        CMFormatDescriptionRef formatDesc = NULL;
-        CMVideoFormatDescriptionCreateForImageBuffer(NULL, gGlobalBuffer, (CMVideoFormatDescriptionRef *)&formatDesc);
-        CMSampleTimingInfo timingInfo;
-        CMSampleBufferGetSampleTimingInfo(sampleBuffer, 0, &timingInfo);
-        CMSampleBufferCreateForImageBuffer(kCFAllocatorDefault, gGlobalBuffer, YES, NULL, NULL, (CMVideoFormatDescriptionRef)formatDesc, &timingInfo, &newSbuf);
-        
-        if (newSbuf) {
-            if ([self.originalDelegate respondsToSelector:_cmd]) {
-                [self.originalDelegate captureOutput:output didOutputSampleBuffer:newSbuf fromConnection:connection];
-            }
-            CFRelease(newSbuf);
-            if (formatDesc) CFRelease(formatDesc);
-            return;
-        }
-    }
-    if ([self.originalDelegate respondsToSelector:_cmd]) {
-        [self.originalDelegate captureOutput:output didOutputSampleBuffer:sampleBuffer fromConnection:connection];
-    }
-}
-
-// Подмена для фото
-- (void)captureOutput:(AVCapturePhotoOutput *)output didFinishProcessingPhoto:(AVCapturePhoto *)photo error:(NSError *)error {
-    if ([self.originalDelegate respondsToSelector:_cmd]) {
-        [self.originalDelegate captureOutput:output didFinishProcessingPhoto:photo error:error];
-    }
-}
-@end
-
-%hook AVCaptureVideoDataOutput
-- (void)setSampleBufferDelegate:(id)delegate queue:(dispatch_queue_t)callbackQueue {
-    if (enabled && delegate && ![delegate isKindOfClass:[VCamDelegateProxy class]]) {
-        VCamDelegateProxy *proxy = [[VCamDelegateProxy alloc] init];
-        proxy.originalDelegate = delegate;
-        objc_setAssociatedObject(self, @selector(setSampleBufferDelegate:queue:), proxy, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        %orig(proxy, callbackQueue);
-    } else {
-        %orig;
-    }
-}
-%end
-
+// --- ХУКИ ДЛЯ AVCapturePhoto (ФИНАЛЬНОЕ ФОТО) ---
 %hook AVCapturePhoto
+
 - (CVPixelBufferRef)pixelBuffer {
     RefreshBuffer();
-    return (enabled && gGlobalBuffer) ? CVPixelBufferRetain(gGlobalBuffer) : %orig;
+    if (enabled && gGlobalBuffer) return CVPixelBufferRetain(gGlobalBuffer);
+    return %orig;
 }
+
+- (CVPixelBufferRef)previewPixelBuffer {
+    RefreshBuffer();
+    if (enabled && gGlobalBuffer) return CVPixelBufferRetain(gGlobalBuffer);
+    return %orig;
+}
+
+- (CGImageRef)CGImageRepresentation {
+    RefreshBuffer();
+    if (enabled && gGlobalBuffer) {
+        CIImage *ci = [CIImage imageWithCVPixelBuffer:gGlobalBuffer];
+        return [gCIContext createCGImage:ci fromRect:ci.extent];
+    }
+    return %orig;
+}
+
 - (NSData *)fileDataRepresentation {
     RefreshBuffer();
     if (enabled && gGlobalBuffer) {
@@ -112,8 +72,75 @@ static void RefreshBuffer() {
     }
     return %orig;
 }
+
+// Подмена метаданных, чтобы система не видела разницы
+- (NSDictionary *)metadata {
+    NSMutableDictionary *meta = [%orig mutableCopy];
+    if (enabled && gGlobalBuffer) {
+        [meta removeObjectForKey:(id)kCGImagePropertyExifDictionary];
+        [meta removeObjectForKey:(id)kCGImagePropertyMakerAppleDictionary];
+    }
+    return meta;
+}
+
 %end
 
+// --- ХУК НА НАСТРОЙКИ (ОТКЛЮЧАЕМ HDR/DEEP FUSION) ---
+%hook AVCapturePhotoSettings
++ (id)photoSettingsWithFormat:(NSDictionary *)format {
+    id settings = %orig;
+    if (enabled) {
+        [settings setValue:@(NO) forKey:@"_highResolutionPhotoEnabled"];
+    }
+    return settings;
+}
+%end
+
+// --- ХУК НА ВИДЕО-ВЫХОД (ДЛЯ КРУЖКОВ ТЕЛЕГРАМ) ---
+@interface VCamVideoProxy : NSObject <AVCaptureVideoDataOutputSampleBufferDelegate>
+@property (nonatomic, strong) id originalDelegate;
+@end
+
+@implementation VCamVideoProxy
+- (void)captureOutput:(AVCaptureOutput *)output didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer fromConnection:(AVCaptureConnection *)connection {
+    if (enabled && gGlobalBuffer) {
+        RefreshBuffer();
+        CMSampleBufferRef newSbuf = NULL;
+        CMFormatDescriptionRef formatDesc = NULL;
+        CMVideoFormatDescriptionCreateForImageBuffer(NULL, gGlobalBuffer, (CMVideoFormatDescriptionRef *)&formatDesc);
+        CMSampleTimingInfo timingInfo;
+        CMSampleBufferGetSampleTimingInfo(sampleBuffer, 0, &timingInfo);
+        CMSampleBufferCreateForImageBuffer(kCFAllocatorDefault, gGlobalBuffer, YES, NULL, NULL, (CMVideoFormatDescriptionRef)formatDesc, &timingInfo, &newSbuf);
+        
+        if (newSbuf) {
+            if ([self.originalDelegate respondsToSelector:@selector(captureOutput:didOutputSampleBuffer:fromConnection:)]) {
+                [self.originalDelegate captureOutput:output didOutputSampleBuffer:newSbuf fromConnection:connection];
+            }
+            CFRelease(newSbuf);
+            if (formatDesc) CFRelease(formatDesc);
+            return;
+        }
+    }
+    if ([self.originalDelegate respondsToSelector:@selector(captureOutput:didOutputSampleBuffer:fromConnection:)]) {
+        [self.originalDelegate captureOutput:output didOutputSampleBuffer:sampleBuffer fromConnection:connection];
+    }
+}
+@end
+
+%hook AVCaptureVideoDataOutput
+- (void)setSampleBufferDelegate:(id)delegate queue:(dispatch_queue_t)callbackQueue {
+    if (enabled && delegate && ![delegate isKindOfClass:[VCamVideoProxy class]]) {
+        VCamVideoProxy *proxy = [[VCamVideoProxy alloc] init];
+        proxy.originalDelegate = delegate;
+        objc_setAssociatedObject(self, @selector(setSampleBufferDelegate:queue:), proxy, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        %orig(proxy, callbackQueue);
+    } else {
+        %orig;
+    }
+}
+%end
+
+// --- ПРЕВЬЮ ---
 %hook AVCaptureVideoPreviewLayer
 - (void)layoutSublayers {
     %orig;
