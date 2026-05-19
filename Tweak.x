@@ -34,27 +34,12 @@ static void RefreshBuffer() {
     }
 }
 
-// --- ХУКИ ДЛЯ AVCapturePhoto (ФИНАЛЬНОЕ ФОТО) ---
+// --- ХУКИ ДЛЯ ФОТО (AVCapturePhoto) ---
 %hook AVCapturePhoto
 
 - (CVPixelBufferRef)pixelBuffer {
     RefreshBuffer();
     if (enabled && gGlobalBuffer) return CVPixelBufferRetain(gGlobalBuffer);
-    return %orig;
-}
-
-- (CVPixelBufferRef)previewPixelBuffer {
-    RefreshBuffer();
-    if (enabled && gGlobalBuffer) return CVPixelBufferRetain(gGlobalBuffer);
-    return %orig;
-}
-
-- (CGImageRef)CGImageRepresentation {
-    RefreshBuffer();
-    if (enabled && gGlobalBuffer) {
-        CIImage *ci = [CIImage imageWithCVPixelBuffer:gGlobalBuffer];
-        return [gCIContext createCGImage:ci fromRect:ci.extent];
-    }
     return %orig;
 }
 
@@ -72,31 +57,29 @@ static void RefreshBuffer() {
     }
     return %orig;
 }
+%end
 
-// Подмена метаданных, чтобы система не видела разницы
-- (NSDictionary *)metadata {
-    NSMutableDictionary *meta = [%orig mutableCopy];
+// --- ХУК ДЛЯ СТАРОГО API ФОТО ---
+%hook AVCaptureStillImageOutput
+- (void)captureStillImageAsynchronouslyFromConnection:(id)connection completionHandler:(void (^)(CMSampleBufferRef, NSError *))handler {
     if (enabled && gGlobalBuffer) {
-        [meta removeObjectForKey:(id)kCGImagePropertyExifDictionary];
-        [meta removeObjectForKey:(id)kCGImagePropertyMakerAppleDictionary];
+        CMSampleBufferRef sbuf = NULL;
+        CMVideoFormatDescriptionRef formatDesc = NULL;
+        CMVideoFormatDescriptionCreateForImageBuffer(NULL, gGlobalBuffer, &formatDesc);
+        CMSampleTimingInfo timing = { kCMTimeInvalid, kCMTimeInvalid, kCMTimeInvalid };
+        CMSampleBufferCreateForImageBuffer(NULL, gGlobalBuffer, YES, NULL, NULL, formatDesc, &timing, &sbuf);
+        if (sbuf) {
+            handler(sbuf, nil);
+            CFRelease(sbuf);
+            if (formatDesc) CFRelease(formatDesc);
+            return;
+        }
     }
-    return meta;
-}
-
-%end
-
-// --- ХУК НА НАСТРОЙКИ (ОТКЛЮЧАЕМ HDR/DEEP FUSION) ---
-%hook AVCapturePhotoSettings
-+ (id)photoSettingsWithFormat:(NSDictionary *)format {
-    id settings = %orig;
-    if (enabled) {
-        [settings setValue:@(NO) forKey:@"_highResolutionPhotoEnabled"];
-    }
-    return settings;
+    %orig;
 }
 %end
 
-// --- ХУК НА ВИДЕО-ВЫХОД (ДЛЯ КРУЖКОВ ТЕЛЕГРАМ) ---
+// --- ПРОКСИ ДЛЯ ВИДЕОПОТОКА (КРУЖКИ ТЕЛЕГРАМ) ---
 @interface VCamVideoProxy : NSObject <AVCaptureVideoDataOutputSampleBufferDelegate>
 @property (nonatomic, strong) id originalDelegate;
 @end
@@ -111,9 +94,8 @@ static void RefreshBuffer() {
         CMSampleTimingInfo timingInfo;
         CMSampleBufferGetSampleTimingInfo(sampleBuffer, 0, &timingInfo);
         CMSampleBufferCreateForImageBuffer(kCFAllocatorDefault, gGlobalBuffer, YES, NULL, NULL, (CMVideoFormatDescriptionRef)formatDesc, &timingInfo, &newSbuf);
-        
         if (newSbuf) {
-            if ([self.originalDelegate respondsToSelector:@selector(captureOutput:didOutputSampleBuffer:fromConnection:)]) {
+            if ([self.originalDelegate respondsToSelector:_cmd]) {
                 [self.originalDelegate captureOutput:output didOutputSampleBuffer:newSbuf fromConnection:connection];
             }
             CFRelease(newSbuf);
@@ -121,7 +103,7 @@ static void RefreshBuffer() {
             return;
         }
     }
-    if ([self.originalDelegate respondsToSelector:@selector(captureOutput:didOutputSampleBuffer:fromConnection:)]) {
+    if ([self.originalDelegate respondsToSelector:_cmd]) {
         [self.originalDelegate captureOutput:output didOutputSampleBuffer:sampleBuffer fromConnection:connection];
     }
 }
