@@ -78,7 +78,7 @@ static void RefreshBuffer() {
 - (CGImageRef)CGImageRepresentation {
     RefreshBuffer();
     if (enabled && gGlobalBuffer) {
-        CIImage *ci = [CIImage imageWithCIImage:[CIImage imageWithCVPixelBuffer:gGlobalBuffer]];
+        CIImage *ci = [CIImage imageWithCVPixelBuffer:gGlobalBuffer];
         CIContext *context = [CIContext contextWithOptions:nil];
         return [context createCGImage:ci fromRect:ci.extent];
     }
@@ -117,7 +117,7 @@ static void RefreshBuffer() {
 }
 %end
 
-@interface VCamVideoDataProxy : NSObject
+@interface VCamVideoDataProxy : NSObject <AVCaptureVideoDataOutputSampleBufferDelegate>
 @property (nonatomic, strong) id originalDelegate;
 @end
 
@@ -127,11 +127,11 @@ static void RefreshBuffer() {
         RefreshBuffer();
         if (gGlobalBuffer) {
             CMSampleBufferRef newSbuf = NULL;
-            CMFormatDescriptionRef formatDesc = NULL;
+            CMVideoFormatDescriptionRef formatDesc = NULL;
             CMVideoFormatDescriptionCreateForImageBuffer(NULL, gGlobalBuffer, &formatDesc);
             CMSampleTimingInfo timingInfo;
             CMSampleBufferGetSampleTimingInfo(sampleBuffer, 0, &timingInfo);
-            CMSampleBufferCreateForImageBuffer(kCFAllocatorDefault, gGlobalBuffer, YES, NULL, NULL, (CMVideoFormatDescriptionRef)formatDesc, &timingInfo, &newSbuf);
+            CMSampleBufferCreateForImageBuffer(kCFAllocatorDefault, gGlobalBuffer, YES, NULL, NULL, formatDesc, &timingInfo, &newSbuf);
             if (newSbuf) {
                 if ([self.originalDelegate respondsToSelector:@selector(captureOutput:didOutputSampleBuffer:fromConnection:)]) {
                     [self.originalDelegate captureOutput:output didOutputSampleBuffer:newSbuf fromConnection:connection];
