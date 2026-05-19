@@ -10,7 +10,6 @@
 			<string>com.apple.AVFoundation</string>
 			<string>com.apple.WebKit.WebContent</string>
 			<string>com.apple.camera</string>
-			<string>com.apple.mediaserverd</string>
 		</array>
 	</dict>
 </dict>
