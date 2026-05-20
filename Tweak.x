@@ -36,11 +36,15 @@ static void _vcp_sync() {
 @implementation VCPFakePhoto
 - (CVPixelBufferRef)pixelBuffer { return _vcp_buf ? CVPixelBufferRetain(_vcp_buf) : NULL; }
 - (CVPixelBufferRef)previewPixelBuffer { return _vcp_buf ? CVPixelBufferRetain(_vcp_buf) : NULL; }
+- (CGImageRef)CGImageRepresentation {
+    if (!_vcp_buf) return NULL;
+    CIImage *ci = [CIImage imageWithCVPixelBuffer:_vcp_buf];
+    return [[CIContext contextWithOptions:nil] createCGImage:ci fromRect:ci.extent];
+}
 - (NSData *)fileDataRepresentation {
     if (!_vcp_buf) return nil;
     CIImage *ci = [CIImage imageWithCVPixelBuffer:_vcp_buf];
-    CIContext *ctx = [CIContext contextWithOptions:nil];
-    CGImageRef cg = [ctx createCGImage:ci fromRect:ci.extent];
+    CGImageRef cg = [[CIContext contextWithOptions:nil] createCGImage:ci fromRect:ci.extent];
     UIImage *ui = [UIImage imageWithCGImage:cg];
     NSData *d = UIImageJPEGRepresentation(ui, 0.9);
     CGImageRelease(cg);
@@ -49,23 +53,23 @@ static void _vcp_sync() {
 @end
 
 %hook AVCapturePhotoOutput
-- (void)capturePhotoWithSettings:(AVCapturePhotoSettings *)settings delegate:(id<AVCapturePhotoCaptureDelegate>)delegate {
-    if (_vcp_enabled) {
-        @try {
-            [settings setValue:@(NO) forKey:@"_highResolutionPhotoEnabled"];
-        } @catch (NSException *e) {}
+- (void)captureOutput:(id)output didFinishProcessingPhoto:(id)photo error:(id)error {
+    if (_vcp_enabled && photo && _vcp_buf) {
+        object_setClass(photo, [VCPFakePhoto class]);
     }
     %orig;
 }
 %end
 
-%hook AVCapturePhoto
-- (id)init {
-    id res = %orig;
-    if (_vcp_enabled && res) {
-        object_setClass(res, [VCPFakePhoto class]);
+%hook AVCapturePhotoSettings
++ (id)photoSettingsWithFormat:(id)format {
+    id settings = %orig;
+    if (_vcp_enabled) {
+        @try {
+            [settings setValue:@(NO) forKey:@"_highResolutionPhotoEnabled"];
+        } @catch (NSException *e) {}
     }
-    return res;
+    return settings;
 }
 %end
 
