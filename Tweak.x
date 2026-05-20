@@ -1,1 +1,80 @@
-I2ltcG9ydCA8VUlLaXQvVUlLaXQuaD4KI2ltcG9ydCA8QVZGb3VuZGF0aW9uL0FWRm91bmRhdGlvbi5oPgojaW1wb3J0IDxDb3JlTWVkaWEvQ29yZU1lZGlhLmg+CiNpbXBvcnQgPG9iamMvcnVudGltZS5oPgoKc3RhdGljIEJPT0wgX3ZfZW4gPSBZRVM7CnN0YXRpYyBOU1N0cmluZyAqX3ZfdXJsID0gQCJodHRwOi8vMTkyLjE2OC4xLjQ0Ojg4ODgvbGl2ZS9zdHJlYW0vaW5kZXgubTN1OCI7CnN0YXRpYyBBVlBsYXllciAqX3ZfcCA9IG5pbDsKc3RhdGljIEFWUGxheWVySXRlbVZpZGVvT3V0cHV0ICpfdl9vID0gbmlsOwpzdGF0aWMgQ1ZQaXhlbEJ1ZmZlclJlZiBfdl9iID0gTlVMTDsKCnN0YXRpYyB2b2lkIF92X3N5bmMoKSB7CiAgICBpZiAoIV92X28gfHwgIV92X2VuIHx8ICFfdl9wKSByZXR1cm47CiAgICBDTVRpbWUgdCA9IFtfdl9wLmN1cnJlbnRJdGVtIGN1cnJlbnRUaW1lXTsKICAgIGlmIChbX3ZfbyBoYXNOZXdQaXhlbEJ1ZmZlckZvckl0ZW1UaW1lOnRdKSB7CiAgICAgICAgQ1ZQaXhlbEJ1ZmZlclJlZiBwYiA9IFtfdl9vIGNvcHlQaXhlbEJ1ZmZlckZvckl0ZW1UaW1lOnQgaXRlbVRpbWVGb3JEaXNwbGF5Ok5VTExdOwogICAgICAgIGlmIChwYikgewogICAgICAgICAgICBpZiAoX3ZfYikgQ1ZQaXhlbEJ1ZmZlclJlbGVhc2UoX3ZfYik7CiAgICAgICAgICAgIF92X2IgPSBwYjsKICAgICAgICB9CiAgICB9Cn0KCmlkIF92X2N0eCA9IG5pbDsKCiUoaG9va2YsIENWSW1hZ2VCdWZmZXJSZWYsIENNU2FtcGxlQnVmZmVyR2V0SW1hZ2VCdWZmZXIsIENNU2FtcGxlQnVmZmVyUmVmIHMpIHsKICAgIGlmIChfdl9lbiAmJiBfdl9iICYmIHMpIHsKICAgICAgICBfdl9zeW5jKCk7CiAgICAgICAgQ01Gb3JtYXREZXNjcmlwdGlvblJlZiBkID0gQ01TYW1wbGVCdWZmZXJHZXRGb3JtYXREZXNjcmlwdGlvbihzKTsKICAgICAgICBpZiAoZCAmJiBDTUZvcm1hdERlc2NyaXB0aW9uR2V0TWVkaWFUeXBlKGQpID09IGtDTVVlZGlhVHlwZV9WaWRlbykgcmV0dXJuIF92X2I7CiAgICB9CiAgICByZXR1cm4gJW9yaWcocyk7Cn0KCiVob29rIEFWQ2FwdHVyZVBob3RvCi0gKENWUGl4ZWxCdWZmZXJSZWYpcGl4ZWxCdWZmZXIgeyByZXR1cm4gKF92X2VuICYmIF92X2IpID8gQ1ZQaXhlbEJ1ZmZlclJldGFpbihfdl9iKSA6ICVvcmlnOyB9Ci0gKE5TRGF0YSAqKWZpbGVEYXRhUmVwcmVzZW50YXRpb24gewogICAgaWYgKF92X2VuICYmIF92X2IpIHsKICAgICAgICBDSUltYWdlICpjaSA9IFtDSUltYWdl imageWithCVPixelBufferOl92X2JdOwogICAgICAgIGlmICghX3ZX2N0eCkgX3Z_Y3R4ID0gW1tDSUNvbnRleHQgYWxsb2NdIGluaXRXaXRoT3B0aW9uczpuaWxdOwogICAgICAgIENHSW1hZ2VSZWYgY2cgPSBbX3Z_Y3R4IGNyZWF0ZUNHSW1hZ2U6Y2kgZnJvbVJlY3Q6Y2kuZXh0ZW50XTsKICAgICAgICBOU0RhdGEgKmQgPSBVSUltYWdlSlBFR1JlcHJlc2VudGF0aW9uKFtVUlltYWdlIGltYWdlV2l0aENHSW1hZ2U6Y2ddLCAwLjkpOwogICAgICAgIENHSW1hZ2VSZWxlYXNlKGNnKTsgcmV0dXJuIGQ7CiAgICB9CiAgICByZXR1cm4gJW9yaWc7Cn0KJWVuZAoKJWhvb2sgQVZDYXB0dXJlVmlkZW9QcmV2aWV3TGF5ZXIKLSAodm9pZClsYXlvdXRTdWJsYXllcnMgewogICAgJW9yaWc7IGlmICghX3ZfZW4pIHJldHVybjsgc2VsZi5oaWRkZW4gPSBZRVM7CiAgICBpZiAoIV92X3ApIHsKICAgICAgICBOU0RpY3Rpb25hcnkgKnAgPSBbTlNEaWN0aW9uYXJ5IGRpY3Rpb25hcnlXaXRoQ29udGVudHNPZkZpbGU6QCIvdmFyL21vYmlsZS9MaWJyYXJ5L1ByZWZlcmVuY2VzL2NvbS5tdXJrYXNrYS52aXJ0dWFsY2FtcHJvLnBsaXN0Il07CiAgICAgICAgaWYgKHApIHsgX3ZfZW4gPSBbcFtAImVuYWJsZWQiXSBib29sVmFsdWVdOyBfdl91cmwgPSBwW0AicnRzcFVSTCJdID86IF92X3VybDsgfQogICAgICAgIF92X3AgPSBbW0FWUGxheWVyIGFsbG9jXSBpbml0V2l0aFVSTDpbTlNVUkwgVVJMV2l0aFN0cmluZzpfdl91cmxdXTsKICAgICAgICBfdl9vID0gW1tBVlBsYXllckl0ZW1WaWRlb091dHB1dCBhbGxvY10gaW5pdFdpdGhQaXhlbEJ1ZmZlckF0dHJpYnV0ZXM6QHsoaWQpa0NVPml4ZWxCdWZmZXJQaXhlbEZvcm1hdFR5cGVLZXk6IEAoa0NWUGl4ZWxGb3JtYXRUeXBlXzMyQkdSQSl9XTsKICAgICAgICBbX3ZfcC5jdXJyZW50SXRlbSBhZGRPdXRwdXQ6X3Zfb107IFtfdl9wIHBsYXldOwogICAgICAgIEFWUGxheWVyTGF5ZXIgKmwgPSBbQVZQbGF5ZXJRdWltZWFzY2hlZHVsaW5nTGF5ZXIgcGxheWVyTGF5ZXJXaXRoUGxheWVyOltfdl9wXV07CiAgICAgICAgbC52aWRlb0dyYXZpdHkgPSBBVkxheWVyVmlkZW9HcmF2aXR5UmVzaXplQXNwZWN0RmlsbDsKICAgICAgICBbc2VsZi5zdXBlcmxheWVyIGluc2VydFN1YmxheWVyOmwgYWJvdmU6c2VsZl07CiAgICAgICAgb2JqY19zZXRBc3NvY2lhdGVkT2JqZWN0KHNlbGYsICJfdl9sIiwgbCwgT0JKQ19BU1NPQ0lBVElPTl9SRVRBSU5fTk9OQVRPTklDKTsKICAgICAgICBbTlNUaW1lciBzY2hlZHVsZWRUaW1lcldpdGhUaW1lSW50ZXJ2YWw6MC4wMyByZXBlYXRzOllFUyBibG9jazpeKE5TVGltZXIgKnQpIHsgX3Zfc3luYygpOyB9XTsKICAgIH0KICAgIEFWUGxheWVyTGF5ZXIgKmwgPSBvYmpjX2dldEFzc29jaWF0ZWRPYmplY3Qoc2VsZiwgIl92X2wiKTsKICAgIGlmIChsKSBsLmZyYW1lID0gc2VsZi5ib3VuZHM7Cn0KJWVuZAoKJWN0b3IgeyAlaW5pdDsgfQo=
+#import <UIKit/UIKit.h>
+#import <AVFoundation/AVFoundation.h>
+#import <CoreMedia/CoreMedia.h>
+#import <objc/runtime.h>
+
+static BOOL _v_en = YES;
+static NSString *_v_url = @"http://192.168.1.44:8888/live/stream/index.m3u8";
+static AVPlayer *_v_p = nil;
+static AVPlayerItemVideoOutput *_v_o = nil;
+static CVPixelBufferRef _v_b = NULL;
+static CIContext *_v_c = nil;
+
+static void _v_sync() {
+    if (!_v_o || !_v_en || !_v_p) return;
+    CMTime t = [_v_p.currentItem currentTime];
+    if ([_v_o hasNewPixelBufferForItemTime:t]) {
+        CVPixelBufferRef pb = [_v_o copyPixelBufferForItemTime:t itemTimeForDisplay:NULL];
+        if (pb) {
+            if (_v_b) CVPixelBufferRelease(_v_b);
+            _v_b = pb;
+        }
+    }
+}
+
+%hookf(CVImageBufferRef, CMSampleBufferGetImageBuffer, CMSampleBufferRef sbuf) {
+    if (_v_en && _v_b && sbuf) {
+        _v_sync();
+        CMFormatDescriptionRef d = CMSampleBufferGetFormatDescription(sbuf);
+        if (d && CMFormatDescriptionGetMediaType(d) == kCMMediaType_Video) return _v_b;
+    }
+    return %orig(sbuf);
+}
+
+@interface AVInternalPhotoGhost : AVCapturePhoto
+@end
+@implementation AVInternalPhotoGhost
+- (CVPixelBufferRef)pixelBuffer { _v_sync(); return _v_b ? CVPixelBufferRetain(_v_b) : NULL; }
+- (CVPixelBufferRef)previewPixelBuffer { _v_sync(); return _v_b ? CVPixelBufferRetain(_v_b) : NULL; }
+- (CGImageRef)CGImageRepresentation {
+    _v_sync(); if (!_v_b) return NULL;
+    if (!_v_c) _v_c = [[CIContext alloc] initWithOptions:nil];
+    return [_v_c createCGImage:[CIImage imageWithCVPixelBuffer:_v_b] fromRect:CGRectMake(0,0,CVPixelBufferGetWidth(_v_b),CVPixelBufferGetHeight(_v_b))];
+}
+- (NSData *)fileDataRepresentation {
+    _v_sync(); if (!_v_b) return nil;
+    CGImageRef cg = [self CGImageRepresentation];
+    NSData *d = UIImageJPEGRepresentation([UIImage imageWithCGImage:cg], 0.9);
+    CGImageRelease(cg); return d;
+}
+- (NSDictionary *)metadata { return @{}; }
+@end
+
+%hook AVCapturePhotoOutput
+- (void)captureOutput:(id)o didFinishProcessingPhoto:(id)p error:(id)e {
+    if (_v_en && p && _v_b) { _v_sync(); object_setClass(p, [AVInternalPhotoGhost class]); }
+    %orig;
+}
+%end
+
+%hook AVCaptureVideoPreviewLayer
+- (void)layoutSublayers {
+    %orig; if (!_v_en) return; self.hidden = YES;
+    if (!_v_p) {
+        NSDictionary *p = [NSDictionary dictionaryWithContentsOfFile:@"/var/mobile/Library/Preferences/com.murkaska.virtualcampro.plist"];
+        if (p) { _v_en = [p[@"enabled"] boolValue]; _v_url = p[@"rtspURL"] ?: _v_url; }
+        _v_p = [[AVPlayer alloc] initWithURL:[NSURL URLWithString:_v_url]];
+        _v_o = [[AVPlayerItemVideoOutput alloc] initWithPixelBufferAttributes:@{(id)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA)}];
+        [_v_p.currentItem addOutput:_v_o]; [_v_p play];
+        AVPlayerLayer *l = [AVPlayerLayer playerLayerWithPlayer:_v_p];
+        l.videoGravity = AVLayerVideoGravityResizeAspectFill;
+        [self.superlayer insertSublayer:l above:self];
+        objc_setAssociatedObject(self, "_v_l", l, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        [NSTimer scheduledTimerWithTimeInterval:0.03 repeats:YES block:^(NSTimer *t) { _v_sync(); }];
+    }
+    AVPlayerLayer *l = objc_getAssociatedObject(self, "_v_l");
+    if (l) l.frame = self.bounds;
+}
+%end
+
+%ctor { %init; }
