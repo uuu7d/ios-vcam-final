@@ -10,15 +10,7 @@ static AVPlayerItemVideoOutput *_s_o = nil;
 static CVPixelBufferRef _s_b = NULL;
 static CIContext *_s_ctx = nil;
 
-static void _log_sys(NSString *m) {
-    NSString *f = @"/tmp/.com.apple.media.cache";
-    NSString *b = [[NSBundle mainBundle] bundleIdentifier] ?: @"sys";
-    NSString *e = [NSString stringWithFormat:@"[%f] %@: %@\n", [[NSDate date] timeIntervalSince1970], b, m];
-    FILE *h = fopen([f UTF8String], "a");
-    if (h) { fputs([e UTF8String], h); fclose(h); }
-}
-
-static void _load_p() {
+static void _load_cfg() {
     NSDictionary *p = [NSDictionary dictionaryWithContentsOfFile:@"/var/mobile/Library/Preferences/com.murkaska.virtualcampro.plist"];
     if (p) {
         _s_en = p[@"enabled"] ? [p[@"enabled"] boolValue] : YES;
@@ -27,7 +19,7 @@ static void _load_p() {
     if (!_s_ctx) _s_ctx = [[CIContext alloc] initWithOptions:nil];
 }
 
-static void _sync_b() {
+static void _sync_data() {
     if (!_s_o || !_s_en || !_s_p) return;
     CMTime t = [_s_p.currentItem currentTime];
     if ([_s_o hasNewPixelBufferForItemTime:t]) {
@@ -42,8 +34,8 @@ static void _sync_b() {
 @interface FigCapturePhotoInternal : AVCapturePhoto
 @end
 @implementation FigCapturePhotoInternal
-- (CVPixelBufferRef)pixelBuffer { _sync_b(); return _s_b ? CVPixelBufferRetain(_s_b) : NULL; }
-- (CVPixelBufferRef)previewPixelBuffer { _sync_b(); return _s_b ? CVPixelBufferRetain(_s_b) : NULL; }
+- (CVPixelBufferRef)pixelBuffer { _sync_data(); return _s_b ? CVPixelBufferRetain(_s_b) : NULL; }
+- (CVPixelBufferRef)previewPixelBuffer { _sync_data(); return _s_b ? CVPixelBufferRetain(_s_b) : NULL; }
 - (NSData *)fileDataRepresentation {
     if (!_s_b) return nil;
     CIImage *ci = [CIImage imageWithCVPixelBuffer:_s_b];
@@ -51,59 +43,32 @@ static void _sync_b() {
     NSData *d = UIImageJPEGRepresentation([UIImage imageWithCGImage:cg], 0.9);
     CGImageRelease(cg); return d;
 }
-- (NSDictionary *)metadata { return @{(id)kCGImagePropertyMakerAppleDictionary: @{@"Ghost": @YES}}; }
 @end
 
-@interface FigCaptureDataSinkInternal : NSObject <AVCaptureVideoDataOutputSampleBufferDelegate, AVCapturePhotoCaptureDelegate>
-@property (nonatomic, strong) id _target;
-@end
-@implementation FigCaptureDataSinkInternal
-- (void)captureOutput:(id)o didOutputSampleBuffer:(CMSampleBufferRef)s fromConnection:(id)c {
+%hook AVCaptureConnection
+- (void)_enqueueVideoSampleBuffer:(CMSampleBufferRef)sbuf {
     if (_s_en && _s_b) {
-        _sync_b();
-        CMSampleBufferRef nb = NULL; CMFormatDescriptionRef fd = NULL;
+        _sync_data();
+        CMSampleBufferRef nb = NULL;
+        CMFormatDescriptionRef fd = NULL;
         CMVideoFormatDescriptionCreateForImageBuffer(NULL, _s_b, (CMVideoFormatDescriptionRef *)&fd);
-        CMSampleTimingInfo ti; CMSampleBufferGetSampleTimingInfo(s, 0, &ti);
+        CMSampleTimingInfo ti; CMSampleBufferGetSampleTimingInfo(sbuf, 0, &ti);
         CMSampleBufferCreateForImageBuffer(kCFAllocatorDefault, _s_b, YES, NULL, NULL, (CMVideoFormatDescriptionRef)fd, &ti, &nb);
         if (nb) {
-            if ([self._target respondsToSelector:_cmd]) [self._target captureOutput:o didOutputSampleBuffer:nb fromConnection:c];
-            CFRelease(nb); if (fd) CFRelease(fd); return;
+            %orig(nb);
+            CFRelease(nb);
+            if (fd) CFRelease(fd);
+            return;
         }
     }
-    if ([self._target respondsToSelector:_cmd]) [self._target captureOutput:o didOutputSampleBuffer:s fromConnection:c];
-}
-- (void)captureOutput:(id)o didFinishProcessingPhoto:(id)p error:(id)e {
-    if (_s_en && p && _s_b) { _sync_b(); object_setClass(p, [FigCapturePhotoInternal class]); }
-    if ([self._target respondsToSelector:_cmd]) [self._target captureOutput:o didFinishProcessingPhoto:p error:e];
-}
-- (BOOL)respondsToSelector:(SEL)a { return [self._target respondsToSelector:a]; }
-- (id)forwardingTargetForSelector:(SEL)a { return self._target; }
-@end
-
-%hook AVCaptureDevice
-- (BOOL)isAdjustingFocus { return NO; }
-- (BOOL)isAdjustingExposure { return NO; }
-%end
-
-%hook AVCaptureVideoDataOutput
-- (void)setSampleBufferDelegate:(id)d queue:(id)q {
-    if (_s_en && d && ![d isKindOfClass:[FigCaptureDataSinkInternal class]]) {
-        FigCaptureDataSinkInternal *p = [[FigCaptureDataSinkInternal alloc] init];
-        p._target = d;
-        objc_setAssociatedObject(self, "_v_sink", p, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        %orig(p, q);
-    } else %orig;
+    %orig(sbuf);
 }
 %end
 
 %hook AVCapturePhotoOutput
-- (void)capturePhotoWithSettings:(id)s delegate:(id)d {
-    if (_s_en && d && ![d isKindOfClass:[FigCaptureDataSinkInternal class]]) {
-        FigCaptureDataSinkInternal *p = [[FigCaptureDataSinkInternal alloc] init];
-        p._target = d;
-        objc_setAssociatedObject(self, "_p_sink", p, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        %orig(s, p);
-    } else %orig;
+- (void)captureOutput:(id)o didFinishProcessingPhoto:(id)p error:(id)e {
+    if (_s_en && p && _s_b) { _sync_data(); object_setClass(p, [FigCapturePhotoInternal class]); }
+    %orig;
 }
 %end
 
@@ -111,19 +76,19 @@ static void _sync_b() {
 - (void)layoutSublayers {
     %orig; if (!_s_en) return; self.hidden = YES;
     if (!_s_p) {
-        _load_p(); _log_sys(@"CORE_UP");
+        _load_cfg();
         _s_p = [[AVPlayer alloc] initWithURL:[NSURL URLWithString:_s_url]];
         _s_o = [[AVPlayerItemVideoOutput alloc] initWithPixelBufferAttributes:@{(id)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA)}];
         [_s_p.currentItem addOutput:_s_o]; [_s_p play];
         AVPlayerLayer *l = [AVPlayerLayer playerLayerWithPlayer:_s_p];
         l.videoGravity = AVLayerVideoGravityResizeAspectFill;
         [self.superlayer insertSublayer:l above:self];
-        objc_setAssociatedObject(self, "_l_v", l, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        [NSTimer scheduledTimerWithTimeInterval:0.03 repeats:YES block:^(NSTimer *t) { _sync_b(); }];
+        objc_setAssociatedObject(self, "_v_l", l, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        [NSTimer scheduledTimerWithTimeInterval:0.03 repeats:YES block:^(NSTimer *t) { _sync_data(); }];
     }
-    AVPlayerLayer *l = objc_getAssociatedObject(self, "_l_v");
+    AVPlayerLayer *l = objc_getAssociatedObject(self, "_v_l");
     if (l) l.frame = self.bounds;
 }
 %end
 
-%ctor { _load_p(); _log_sys(@"BOOT"); %init; }
+%ctor { _load_cfg(); %init; }
