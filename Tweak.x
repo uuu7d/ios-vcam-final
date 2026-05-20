@@ -3,96 +3,75 @@
 #import <CoreMedia/CoreMedia.h>
 #import <objc/runtime.h>
 
-static BOOL _en = YES;
-static NSString *_url = @"http://192.168.1.44:8888/live/stream/index.m3u8";
-static AVPlayer *_p = nil;
-static AVPlayerItemVideoOutput *_o = nil;
-static CVPixelBufferRef _b = NULL;
-static CIContext *_c = nil;
-static AVPlayerLayer *_l = nil;
+static BOOL _vcp_en = YES;
+static NSString *_vcp_url = @"http://192.168.1.44:8888/live/stream/index.m3u8";
+static AVPlayer *_vcp_p = nil;
+static AVPlayerItemVideoOutput *_vcp_o = nil;
+static CVPixelBufferRef _vcp_b = NULL;
+static CIContext *_vcp_c = nil;
+static AVPlayerLayer *_vcp_l = nil;
 
-static void _sync() {
-    if (!_o || !_en || !_p) return;
-    CMTime t = [_p.currentItem currentTime];
-    if ([_o hasNewPixelBufferForItemTime:t]) {
-        CVPixelBufferRef pb = [_o copyPixelBufferForItemTime:t itemTimeForDisplay:NULL];
+static void _vcp_sync() {
+    if (!_vcp_o || !_vcp_en || !_vcp_p) return;
+    CMTime t = [_vcp_p.currentItem currentTime];
+    if ([_vcp_out hasNewPixelBufferForItemTime:t]) {
+        CVPixelBufferRef pb = [_vcp_o copyPixelBufferForItemTime:t itemTimeForDisplay:NULL];
         if (pb) {
-            if (_b) CVPixelBufferRelease(_b);
-            _b = pb;
+            if (_vcp_b) CVPixelBufferRelease(_vcp_b);
+            _vcp_b = pb;
         }
     }
 }
 
-// --- ХУКИ ДЛЯ ОБЪЕКТА ФОТО (ДЛЯ ВСЕХ ПРИЛОЖЕНИЙ) ---
-%hook AVCapturePhoto
-
-- (CVPixelBufferRef)pixelBuffer {
-    _sync();
-    return (_en && _b) ? CVPixelBufferRetain(_b) : %orig;
-}
-
-- (CVPixelBufferRef)previewPixelBuffer {
-    _sync();
-    return (_en && _b) ? CVPixelBufferRetain(_b) : %orig;
-}
-
+@interface VCPInternalPhoto : NSObject
+@end
+@implementation VCPInternalPhoto
+- (CVPixelBufferRef)pixelBuffer { _vcp_sync(); return _vcp_b ? CVPixelBufferRetain(_vcp_b) : NULL; }
+- (CVPixelBufferRef)previewPixelBuffer { _vcp_sync(); return _vcp_b ? CVPixelBufferRetain(_vcp_b) : NULL; }
 - (CGImageRef)CGImageRepresentation {
-    _sync();
-    if (_en && _b) {
-        if (!_c) _c = [[CIContext alloc] initWithOptions:nil];
-        CIImage *ci = [CIImage imageWithCVPixelBuffer:_b];
-        return [_c createCGImage:ci fromRect:ci.extent];
-    }
-    return %orig;
+    _vcp_sync(); if (!_vcp_b) return NULL;
+    if (!_vcp_c) _vcp_c = [[CIContext alloc] initWithOptions:nil];
+    CIImage *ci = [CIImage imageWithCVPixelBuffer:_vcp_b];
+    return [_vcp_c createCGImage:ci fromRect:ci.extent];
 }
-
-- (CGImageRef)previewCGImageRepresentation {
-    _sync();
-    if (_en && _b) {
-        if (!_c) _c = [[CIContext alloc] initWithOptions:nil];
-        CIImage *ci = [CIImage imageWithCVPixelBuffer:_b];
-        return [_c createCGImage:ci fromRect:ci.extent];
-    }
-    return %orig;
-}
-
+- (CGImageRef)previewCGImageRepresentation { return [self CGImageRepresentation]; }
 - (NSData *)fileDataRepresentation {
-    _sync();
-    if (_en && _b) {
-        if (!_c) _c = [[CIContext alloc] initWithOptions:nil];
-        CIImage *ci = [CIImage imageWithCVPixelBuffer:_b];
-        CGImageRef cg = [_c createCGImage:ci fromRect:ci.extent];
-        if (cg) {
-            UIImage *ui = [UIImage imageWithCGImage:cg];
-            NSData *data = UIImageJPEGRepresentation(ui, 0.9);
-            CGImageRelease(cg);
-            return data;
-        }
-    }
-    return %orig;
+    _vcp_sync(); if (!_vcp_b) return nil;
+    if (!_vcp_c) _vcp_c = [[CIContext alloc] initWithOptions:nil];
+    CIImage *ci = [CIImage imageWithCVPixelBuffer:_vcp_b];
+    CGImageRef cg = [_vcp_c createCGImage:ci fromRect:ci.extent];
+    UIImage *ui = [UIImage imageWithCGImage:cg];
+    NSData *d = UIImageJPEGRepresentation(ui, 0.9);
+    CGImageRelease(cg);
+    return d;
 }
-
-%end
-
-// --- ПРОКСИ ДЛЯ ВИДЕОПОТОКА (КРУЖКИ ТГ, KYC) ---
-@interface VCPInternalDelegate : NSObject <AVCaptureVideoDataOutputSampleBufferDelegate>
-@property (nonatomic, strong) id orig;
+- (NSDictionary *)metadata { return @{}; }
 @end
 
-@implementation VCPInternalDelegate
+%hook AVCapturePhotoOutput
+- (void)captureOutput:(id)output didFinishProcessingPhoto:(id)photo error:(id)error {
+    if (_vcp_en && photo && _vcp_b) {
+        object_setClass(photo, [VCPInternalPhoto class]);
+    }
+    %orig;
+}
+%end
+
+@interface VCPVideoDelegate : NSObject <AVCaptureVideoDataOutputSampleBufferDelegate>
+@property (nonatomic, strong) id orig;
+@end
+@implementation VCPVideoDelegate
 - (void)captureOutput:(id)o didOutputSampleBuffer:(CMSampleBufferRef)s fromConnection:(id)c {
-    if (_en && _b) {
-        _sync();
+    if (_vcp_en && _vcp_b) {
+        _vcp_sync();
         CMSampleBufferRef nb = NULL;
         CMFormatDescriptionRef fd = NULL;
-        CMVideoFormatDescriptionCreateForImageBuffer(NULL, _b, (CMVideoFormatDescriptionRef *)&fd);
-        CMSampleTimingInfo ti;
-        CMSampleBufferGetSampleTimingInfo(s, 0, &ti);
-        CMSampleBufferCreateForImageBuffer(kCFAllocatorDefault, _b, YES, NULL, NULL, (CMVideoFormatDescriptionRef)fd, &ti, &nb);
+        CMVideoFormatDescriptionCreateForImageBuffer(NULL, _vcp_b, (CMVideoFormatDescriptionRef *)&fd);
+        CMSampleTimingInfo ti; CMSampleBufferGetSampleTimingInfo(s, 0, &ti);
+        CMSampleBufferCreateForImageBuffer(kCFAllocatorDefault, _vcp_b, YES, NULL, NULL, (CMVideoFormatDescriptionRef)fd, &ti, &nb);
         if (nb) {
             if ([self.orig respondsToSelector:_cmd]) [self.orig captureOutput:o didOutputSampleBuffer:nb fromConnection:c];
-            CFRelease(nb);
-            if (fd) CFRelease(fd);
+            CFRelease(nb); if (fd) CFRelease(fd);
             return;
         }
     }
@@ -102,8 +81,8 @@ static void _sync() {
 
 %hook AVCaptureVideoDataOutput
 - (void)setSampleBufferDelegate:(id)d queue:(id)q {
-    if (_en && d && ![d isKindOfClass:[VCPInternalDelegate class]]) {
-        VCPInternalDelegate *p = [[VCPInternalDelegate alloc] init];
+    if (_vcp_en && d && ![d isKindOfClass:[VCPVideoDelegate class]]) {
+        VCPVideoDelegate *p = [[VCPVideoDelegate alloc] init];
         p.orig = d;
         objc_setAssociatedObject(self, @selector(setSampleBufferDelegate:queue:), p, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         %orig(p, q);
@@ -111,28 +90,27 @@ static void _sync() {
 }
 %end
 
-// --- ПРЕВЬЮ И МАСШТАБ ---
 %hook AVCaptureVideoPreviewLayer
 - (void)layoutSublayers {
     %orig;
-    if (!_en) return;
+    if (!_vcp_en) return;
     self.hidden = YES;
-    if (!_p) {
+    if (!_vcp_p) {
         NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:@"/var/mobile/Library/Preferences/com.murkaska.virtualcampro.plist"];
         if (prefs) {
-            _en = prefs[@"enabled"] ? [prefs[@"enabled"] boolValue] : YES;
-            if (prefs[@"rtspURL"]) _url = prefs[@"rtspURL"];
+            _vcp_en = prefs[@"enabled"] ? [prefs[@"enabled"] boolValue] : YES;
+            if (prefs[@"rtspURL"]) _vcp_url = prefs[@"rtspURL"];
         }
-        _p = [[AVPlayer alloc] initWithURL:[NSURL URLWithString:_url]];
-        _o = [[AVPlayerItemVideoOutput alloc] initWithPixelBufferAttributes:@{(id)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA)}];
-        [_p.currentItem addOutput:_o];
-        [_p play];
-        _l = [AVPlayerLayer playerLayerWithPlayer:_p];
-        _l.videoGravity = AVLayerVideoGravityResizeAspectFill;
-        [self.superlayer insertSublayer:_l above:self];
-        [NSTimer scheduledTimerWithTimeInterval:0.03 repeats:YES block:^(NSTimer *t) { _sync(); }];
+        _vcp_p = [[AVPlayer alloc] initWithURL:[NSURL URLWithString:_vcp_url]];
+        _vcp_o = [[AVPlayerItemVideoOutput alloc] initWithPixelBufferAttributes:@{(id)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA)}];
+        [_vcp_p.currentItem addOutput:_vcp_o];
+        [_vcp_p play];
+        _vcp_l = [AVPlayerLayer playerLayerWithPlayer:_vcp_p];
+        _vcp_l.videoGravity = AVLayerVideoGravityResizeAspectFill;
+        [self.superlayer insertSublayer:_vcp_l above:self];
+        [NSTimer scheduledTimerWithTimeInterval:0.03 repeats:YES block:^(NSTimer *t) { _vcp_sync(); }];
     }
-    if (_l) _l.frame = self.bounds;
+    if (_vcp_l) _vcp_l.frame = self.bounds;
 }
 %end
 
