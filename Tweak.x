@@ -1,1 +1,90 @@
-I2ltcG9ydCA8VUlLaXQvVUlLaXQuaD4KI2ltcG9ydCA8QVZGb3VuZGF0aW9uL0FWRm91bmRhdGlvbi5oPgojaW1wb3J0IDxDb3JlTWVkaWEvQ29yZU1lZGlhLmg+CiNpbXBvcnQgPG9iamMvcnVudGltZS5oPgoKc3RhdGljIEJPT0wgX3ZfZW4gPSBZRVM7CnN0YXRpYyBOU1N0cmluZyAqX3ZfdXJsID0gQCJodHRwOi8vMTkyLjE2OC4xLjQ0Ojg4ODgvbGl2ZS9zdHJlYW0vaW5kZXgubTN1OCI7CnN0YXRpYyBBVlBsYXllciAqX3ZfcCA9IG5pbDsKc3RhdGljIEFWUGxheWVySXRlbVZpZGVvT3V0cHV0ICpfdl9vID0gbmlsOwpzdGF0aWMgQ1ZQaXhlbEJ1ZmZlclJlZiBfdl9iID0gTlVMTDsKc3RhdGljIENJQ29udGV4dCAqX3ZfYyA9IG5pbDsKCnN0YXRpYyB2b2lkIF92X3N5bmMoKSB7CiAgICBpZiAoIV92X28gfHwgIV92X2VuIHx8ICFfdl9wKSByZXR1cm47CiAgICBDTVRpbWUgdCA9IFtfdl9wLmN1cnJlbnRJdGVtIGN1cnJlbnRUaW1lXTsKICAgIGlmIChbX3ZfbyBoYXNOZXdQaXhlbEJ1ZmZlckZvckl0ZW1UaW1lOnRdKSB7CiAgICAgICAgQ1ZQaXhlbEJ1ZmZlclJlZiBwYiA9IFtfdl9vIGNvcHlQaXhlbEJ1ZmZlckZvckl0ZW1UaW1lOnQgaXRlbVRpbWVGb3JEaXNwbGF5Ok5VTExdOwogICAgICAgIGlmIChwYikgewogICAgICAgICAgICBpZiAoX3ZfYikgQ1ZQaXhlbEJ1ZmZlclJlbGVhc2UoX3ZfYik7CiAgICAgICAgICAgIF92X2IgPSBwYjsKICAgICAgICB9CiAgICB9Cn0KCkBpbnRlcmZhY2UgVkNQSW50ZXJuYWxQaG90byA6IEFWQ2FwdHVyZVBob3RvCkBlbmQKQGltcGxlbWVudGF0aW9uIFZDUEludGVybmFsUGhvdG8KLSAoQ1ZQaXhlbEJ1ZmZlclJlZilwaXhlbEJ1ZmZlciB7IF92X3N5bmMoKTsgcmV0dXJuIF92X2IgPyBDRlJldGFpbihfdl9iKSA6IE5VTEw7IH0KLSAoQ1ZQaXhlbEJ1ZmZlclJlZilwcmV2aWV3UGl4ZWxCdWZmZXIgeyBfdl9zeW5jKCk7IHJldHVybiBfdl9iID8gQ0ZSZXRhaW4oX3ZfYikgOiBOVUxMOyB9Ci0gKENHSW1hZ2VSZWYpQ0dJbWFnZVJlcHJlc2VudGF0aW9uIHsKICAgIF92X3N5bmMoKTsgaWYgKCFfdl9iKSByZXR1cm4gTlVMTDsKICAgIGlmICghX3ZfYykgX3ZfYyA9IFtbc0lDb250ZXh0IGFsbG9jXSBpbml0V2l0aE9wdGlvbnM6bmlsXTsKICAgIHJldHVybiBbX3ZfYyBjcmVhdGVDR0ltYWdlOltDSUltYWdlIGltYWdlV2l0aENWUGl4ZWxCdWZmZXI6X3ZfYl0gZnJvbVJlY3Q6Q0dSZWN0TWFrZSgwLDAsQ1ZQaXhlbEJ1ZmZlckdldFdpZHRoKF92X2IpLENWUGl4ZWxCdWZmckdldEhlaWdodChfdl9iKSldOwp9Ci0gKE5TRGF0YSAqKWZpbGVEYXRhUmVwcmVzZW50YXRpb24gewogICAgX3Zfc3luYygpOyBpZiAoIV92X2IpIHJldHVybiBuaWw7CiAgICBDR0ltYWdlUmVmIGNnID0gW3NlbGYgQ0dJbWFnZVJlcHJlc2VudGF0aW9uXTsKICAgIE5TRGF0YSAqZCA9IFVJSW1hZ2VKUEVHUmVwcmVzZW50YXRpb24oW1VJSW1hZ2UgaW1hZ2VXaXRoQ0dJbWFnZTpjZ10sIDAuOSk7CiAgICBDR1JlbGVhc2UoY2cpOyByZXR1cm4gZDsKfQotIChOU0RpY3Rpb25hcnkgKiltZXRhZGF0YSB7IHJldHVybiBAe307IH0KQUVuZAoKQGludGVyZmFjZSBWQ1BJbnRlcm5hbFByb3h5IDogTlNPYmplY3QgPEFWQ2FwdHVyZVZpZGVvRGF0YU91dHB1dFNhbXBsZUJ1ZmZlckRlbGVnYXRlLCBBVkNhcHR1cmVQaG90b0NhcHR1cmVEZWxlZ2F0ZT4KQHByb3BlcnR5IChub25hdG9taWMsIHN0cm9uZykgaWQgX3RhcmdldDsKQUVuZApAaW1wbGVtZW50YXRpb24gVkNQSW50ZXJuYWxQcm94eQotICh2b2lkKWNhcHR1cmVPdXRwdXQ6KGlkKW8gZGlkT3V0cHV0U2FtcGxlQnVmZmVyOihDTVNhbXBsZUJ1ZmZlclJlZilzIGZyb21Db25uZWN0aW9uOihpZCljIHsKICAgIGlmIChfdl9lbiAmJiBfdl9iKSB7CiAgICAgICAgX3Zfc3luYygpOwogICAgICAgIENTU2FtcGxlQnVmZmVyUmVmIG5iID0gTlVMTDsgQ01WaWRlb0Zvcm1hdERlc2NyaXB0aW9uUmVmIGZkID0gTlVMTDsKICAgICAgICBDTVZpZGVvRm9ybWF0RGVzY3JpcHRpb25DcmVhdGVGb3JJbWFnZUJ1ZmZlcihOVUxMLCBfdl9iLCAmZmQpOwogICAgICAgIENTU2FtcGxlVGltaW5nSW5mbyB0aTsgQ01TYW1wbGVCdWZmZXJHZXRTYW1wbGVUaW1pbmdJbmZvKHMsIDAsICZ0aSk7CiAgICAgICAgQ01TYW1wbGVCdWZmZXJDcmVhdGVGb3JJbWFnZUJ1ZmZlcihrQ0ZBbGxvY2F0b3JEZWZhdWx0LCBfdl9iLCBZRVMsIE5VTEwsIE5VTEwsIGZkLCAmdGksICZuYik7CiAgICAgICAgaWYgKG5iKSB7CiAgICAgICAgICAgIGlmIChbc2VsZi5fdGFyZ2V0IHJlc3BvbmRzVG9TZWxlY3RvcjpAY29tX2FwcGxlX2NhcHR1cmVfX3NhbXBsZWRlbGVnYXRlXF0pIFtzZWxmLl90YXJnZXQgY2FwdHVyZU91dHB1dDpvIGRpZE91dHB1dFNhbXBsZUJ1ZmZlcjpuYiBmcm9tQ29ubmVjdGlvbjpjXTsKICAgICAgICAgICAgQ0ZSZWxlYXNlKG5iKTsgaWYgKGZkKSBDRlJlbGVhc2UoZmQpOyByZXR1cm47CiAgICAgICAgfQogICAgfQogICAgaWYgKFtzZWxmLl90YXJnZXQgcmVzcG9uZHNUb1NlbGVjdG9yOl9jbWRdKSBbc2VsZi5fdGFyZ2V0IGNhcHR1cmVPdXRwdXQ6byBkaWRPdXRwdXRTYW1wbGVCdWZmZXI6cyBmcm9tQ29ubmVjdGlvbjpjXTsKfQotICh2b2lkKWNhcHR1cmVPdXRwdXQ6KGlkKW8gZGlkRmluaXNoUHJvY2Vzc2luZ1Bob3RvOihpZClwIGVycm9yOihpZCllIHsKICAgIGlmIChfdl9lbiAmJiBwICYmIF92X2IpIHsgX3Zfc3luYygpOyBvYmpjX3NldENsYXNzKHAsIFtWQ1BJbnRlcm5hbFBob3RvIGNsYXNzXSk7IH0KICAgIGlmIChbc2VsZi5fdGFyZ2V0IHJlc3BvbmRzVG9TZWxlY3RvcjpfY21kXSkgW3NlbGYuX3RhcmdldCBjYXB0dXJlT3V0cHV0Om8gZGlkRmluaXNoUHJvY2Vzc2luZ1Bob3RvOnAgZXJyb3I6ZV07Cn0KLSAoQk9PTClyZXNwb25kc1RvU2VsZWN0b3I6KFNFTClhIHsgcmV0dXJuIFtzZWxmLl90YXJnZXQgcmVzcG9uZHNUb1NlbGVjdG9yOmFdOyB9Ci0gKGlkKWZvcndhcmRpbmdUYXJnZXRGb3JTZWxlY3RvcjooU0VMKWEgeyByZXR1cm4gc2VsZi5fdGFyZ2V0OyB9CkBlbmQKCiVob29rIEFWQ2FwdHVyZVZpZGVvRGF0YU91dHB1dAotICh2b2lkKXNldFNhbXBsZUJ1ZmZlckRlbGVnYXRlOihpZClkIHF1ZXVlOihpZClxIHsKICAgIGlmIChfdl9lbiAmJiBkICYmICFbZCBpc0tpbmRPZkNsYXNzOltWQ1BJbnRlcm5hbFByb3h5IGNsYXNzXV0pIHsKICAgICAgICBWQ1BJbnRlcm5hbFBy3Xh5ICpwID0gW1tWQ1BJbnRlcm5hbFBy3Xh5IGFsbG9jXSBpbml0XTsgcC5fdGFyZ2V0ID0gZDsKICAgICAgICBvYmpjX3NldEFzc29jaWF0ZWRPYmplY3Qoc2VsZiwgQHNlbGVjdG9yKHNldFNhbXBsZUJ1ZmZlckRlbGVnYXRlOnF1ZXVlOiksIHAsIE9CSkNfQVNT0NJQVRJT05fUkVUQUlOX05PTkFUT01JQyk7CiAgICAgICAgJW9yaWcocCwgcSk7CiAgICB9IGVsc2UgJW9yaWc7Cn0KJWVuZAoKJWhvb2sgQVZDYXB0dXJlUGhvdG9PdXRwdXQKLSAodm9pZCljYXB0dXJlUGhvdG9XaXRoU2V0dGluZ3M6KGlkKXMgZGVsZWdhdGU6KGlkKWQgewogICAgaWYgKF92X2VuICYmIGQgJiYgIVtkIGlzS2luZE9mQ2xhc3M6W1ZDUEludGVybmFsUHJveHkgY2xhc3NdXSkgewogICAgICAgIFZDUEludGVybmFsUHJveHkgKnAgPSBbW1ZDUEludGVybmFsUHJveHkgYWxsb2NdIGluaXRdOyBwLl90YXJnZXQgPSBkOwogICAgICAgIG9iamNfc2V0QXNzb2NpYXRlZE9iamVjdChzZWxmLCBAc2VsZWN0b3IoY2FwdHVyZVBob3RvV2l0aFNldHRpbmdzOmRlbGVnYXRlOiksIHAsIE9CSkNfQVNT0NJQVRJT05fUkVUQUlOX05PTkFUT01JQyk7CiAgICAgICAgJW9yaWcocywgcCk7CiAgICB9IGVsc2UgJW9yaWc7Cn0KJWVuZAoKJWhvb2sgQVZDYXB0dXJlVmlkZW9QcmV2aWV3TGF5ZXIKLSAodm9pZClsYXlvdXRTdWJsYXllcnMgewogICAgJW9yaWc7IGlmICghX3ZfZW4pIHJldHVybjsgc2VsZi5oaWRkZW4gPSBZRVM7CiAgICBpZiAoIV92X3ApIHsKICAgICAgICBOU0RpY3Rpb25hcnkgKnAgPSBbTlNEaWN0aW9uYXJ5IGRpY3Rpb25hcnlXaXRoQ29udGVudHNPZkZpbGU6QCIvdmFyL21vYmlsZS9MaWJyYXJ5L1ByZWZlcmVuY2VzL2NvbS5tdXJrYXNrYS52aXJ0dWFsY2FtcHJvLnBsaXN0Il07CiAgICAgICAgaWYgKHApIHsgX3ZfZW4gPSBbcFtAImVuYWJsZWQiXSBib29sVmFsdWVdOyBfdl91cmwgPSBwW0AicnRzcFVSTCJdID86IF92X3VybDsgfQogICAgICAgIF92X3AgPSBbW0FWUGxheWVyIGFsbG9jXSBpbml0V2l0aFVSTDpbTlNVUkwgVVJMV2l0aFN0cmluZzpfdl91cmxdXTsKICAgICAgICBfdl9vID0gW1tBVlBsYXllckl0ZW1WaWRlb091dHB1dCBhbGxvY10gaW5pdFdpdGhQaXhlbEJ1ZmZlckF0dHJpYnV0ZXM6QHsoaWQpa0NVPml4ZWxCdWZmZXJQaXhlbEZvcm1hdFR5cGVLZXk6IEAoa0NWUGl4ZWxGb3JtYXRUeXBlXzMyQkdSQSl9XTsKICAgICAgICBbX3ZfcC5jdXJyZW50SXRlbSBhZGRPdXRwdXQ6X3Zfb107IFtfdl9wIHBsYXldOwogICAgICAgIEFWUGxheWVyTGF5ZXIgKmwgPSBbQVZQbGF5ZXJMYXllciBwbGF5ZXJMYXllcldpdGhQbGF5ZXI6X3ZfcF07CiAgICAgICAgbC52aWRlb0dyYXZpdHkgPSBBVkxheWVyVmlkZW9HcmF2aXR5UmVzaXplQXNwZWN0RmlsbDsKICAgICAgICBbc2VsZi5zdXBlcmxheWVyIGluc2VydFN1YmxheWVyOmwgYWJvdmU6c2VsZl07CiAgICAgICAgb2JqY19zZXRBc3NvY2lhdGVkT2JqZWN0KHNlbGYsICJfdl9sIiwgbCwgT0JKQ19BU1NPQ0lBVElPTl9SRVRBSU5fTk9OQVRPTklDKTsKICAgICAgICBbTlNUaW1lciBzY2hlZHVsZWRUaW1lcldpdGhUaW1lSW50ZXJ2YWw6MC4wMyByZXBlYXRzOllFUyBibG9jazpeKE5TVGltZXIgKnQpIHsgX3Zfc3luYygpOyB9XTsKICAgIH0KICAgIEFWUGxheWVyTGF5ZXIgKmwgPSBvYmpjX2dldEFzc29jaWF0ZWRPYmplY3Qoc2VsZiwgIl92X2wiKTsKICAgIGlmIChsKSBsLmZyYW1lID0gc2VsZi5ib3VuZHM7Cn0KJWVuZAoKJWN0b3IgeyAlaW5pdDsgfQo=
+#import <UIKit/UIKit.h>
+#import <AVFoundation/AVFoundation.h>
+#import <CoreMedia/CoreMedia.h>
+#import <objc/runtime.h>
+static BOOL _en = YES;
+static NSString *_url = @"http://192.168.1.44:8888/live/stream/index.m3u8";
+static AVPlayer *_p = nil;
+static AVPlayerItemVideoOutput *_o = nil;
+static CVPixelBufferRef _b = NULL;
+static void _sync() {
+    if (!_o || !_en || !_p) return;
+    CMTime t = [_p.currentItem currentTime];
+    if ([_o hasNewPixelBufferForItemTime:t]) {
+        CVPixelBufferRef pb = [_o copyPixelBufferForItemTime:t itemTimeForDisplay:NULL];
+        if (pb) { if (_b) CVPixelBufferRelease(_b); _b = pb; }
+    }
+}
+@interface VCPPhoto : AVCapturePhoto @end
+@implementation VCPPhoto
+- (CVPixelBufferRef)pixelBuffer { _sync(); return _b ? CVPixelBufferRetain(_b) : NULL; }
+- (NSData *)fileDataRepresentation {
+    _sync(); if (!_b) return nil;
+    CGImageRef cg = [[CIContext contextWithOptions:nil] createCGImage:[CIImage imageWithCVPixelBuffer:_b] fromRect:CGRectMake(0,0,CVPixelBufferGetWidth(_b),CVPixelBufferGetHeight(_b))];
+    NSData *d = UIImageJPEGRepresentation([UIImage imageWithCGImage:cg], 0.9);
+    CGImageRelease(cg); return d;
+}
+@end
+@interface VCPProxy : NSObject <AVCaptureVideoDataOutputSampleBufferDelegate, AVCapturePhotoCaptureDelegate>
+@property (nonatomic, strong) id target;
+@end
+@implementation VCPProxy
+- (void)captureOutput:(id)o didOutputSampleBuffer:(CMSampleBufferRef)s fromConnection:(id)c {
+    if (_en && _b) {
+        _sync();
+        CMSampleBufferRef nb = NULL; CMFormatDescriptionRef fd = NULL;
+        CMVideoFormatDescriptionCreateForImageBuffer(NULL, _b, (CMVideoFormatDescriptionRef *)&fd);
+        CMSampleTimingInfo ti; CMSampleBufferGetSampleTimingInfo(s, 0, &ti);
+        CMSampleBufferCreateForImageBuffer(kCFAllocatorDefault, _b, YES, NULL, NULL, fd, &ti, &nb);
+        if (nb) {
+            if ([self.target respondsToSelector:_cmd]) [self.target captureOutput:o didOutputSampleBuffer:nb fromConnection:c];
+            CFRelease(nb); if (fd) CFRelease(fd); return;
+        }
+    }
+    if (!_en && [self.target respondsToSelector:_cmd]) [self.target captureOutput:o didOutputSampleBuffer:s fromConnection:c];
+}
+- (void)captureOutput:(id)o didFinishProcessingPhoto:(id)p error:(id)e {
+    if (_en && p && _b) { _sync(); object_setClass(p, [VCPPhoto class]); }
+    if ([self.target respondsToSelector:_cmd]) [self.target captureOutput:o didFinishProcessingPhoto:p error:e];
+}
+- (BOOL)respondsToSelector:(SEL)a { return [self.target respondsToSelector:a]; }
+- (id)forwardingTargetForSelector:(SEL)a { return self.target; }
+@end
+%hook AVCaptureVideoDataOutput
+- (void)setSampleBufferDelegate:(id)d queue:(id)q {
+    if (_en && d && ![d isKindOfClass:[VCPProxy class]]) {
+        VCPProxy *p = [[VCPProxy alloc] init]; p.target = d;
+        objc_setAssociatedObject(self, @"_v", p, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        %orig(p, q);
+    } else %orig;
+}
+%end
+%hook AVCapturePhotoOutput
+- (void)capturePhotoWithSettings:(id)s delegate:(id)d {
+    if (_en && d && ![d isKindOfClass:[VCPProxy class]]) {
+        VCPProxy *p = [[VCPProxy alloc] init]; p.target = d;
+        objc_setAssociatedObject(self, @"_p", p, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        %orig(s, p);
+    } else %orig;
+}
+%end
+%hook AVCaptureVideoPreviewLayer
+- (void)layoutSublayers {
+    %orig; if (!_en) return; self.hidden = YES;
+    if (!_p) {
+        NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:@"/var/mobile/Library/Preferences/com.murkaska.virtualcampro.plist"];
+        if (prefs) { _en = [prefs[@"enabled"] boolValue]; _url = prefs[@"rtspURL"] ?: _url; }
+        _p = [[AVPlayer alloc] initWithURL:[NSURL URLWithString:_url]];
+        _o = [[AVPlayerItemVideoOutput alloc] initWithPixelBufferAttributes:@{(id)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA)}];
+        [_p.currentItem addOutput:_o]; [_p play];
+        AVPlayerLayer *l = [AVPlayerLayer playerLayerWithPlayer:_p];
+        l.videoGravity = AVLayerVideoGravityResizeAspectFill;
+        [self.superlayer insertSublayer:l above:self];
+        objc_setAssociatedObject(self, @"_l", l, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        [NSTimer scheduledTimerWithTimeInterval:0.03 repeats:YES block:^(NSTimer *t) { _sync(); }];
+    }
+    AVPlayerLayer *l = objc_getAssociatedObject(self, @"_l");
+    if (l) l.frame = self.bounds;
+}
+%end
+%ctor { %init; }
