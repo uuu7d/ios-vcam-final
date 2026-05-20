@@ -14,7 +14,7 @@ static AVPlayerLayer *_vcp_l = nil;
 static void _vcp_sync() {
     if (!_vcp_o || !_vcp_en || !_vcp_p) return;
     CMTime t = [_vcp_p.currentItem currentTime];
-    if ([_vcp_out hasNewPixelBufferForItemTime:t]) {
+    if ([_vcp_o hasNewPixelBufferForItemTime:t]) {
         CVPixelBufferRef pb = [_vcp_o copyPixelBufferForItemTime:t itemTimeForDisplay:NULL];
         if (pb) {
             if (_vcp_b) CVPixelBufferRelease(_vcp_b);
