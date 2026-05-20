@@ -8,6 +8,7 @@ static NSString *_vcp_url = @"http://192.168.1.44:8888/live/stream/index.m3u8";
 static AVPlayer *_vcp_player = nil;
 static AVPlayerItemVideoOutput *_vcp_out = nil;
 static CVPixelBufferRef _vcp_buf = NULL;
+static CIContext *_vcp_ctx = nil;
 static AVPlayerLayer *_vcp_view = nil;
 
 static void _vcp_load() {
@@ -31,45 +32,71 @@ static void _vcp_sync() {
     }
 }
 
-@interface VCPFakePhoto : NSObject
-@end
-@implementation VCPFakePhoto
-- (CVPixelBufferRef)pixelBuffer { return _vcp_buf ? CVPixelBufferRetain(_vcp_buf) : NULL; }
-- (CVPixelBufferRef)previewPixelBuffer { return _vcp_buf ? CVPixelBufferRetain(_vcp_buf) : NULL; }
+%hook AVCapturePhoto
+- (CVPixelBufferRef)pixelBuffer {
+    _vcp_sync();
+    return (_vcp_enabled && _vcp_buf) ? CVPixelBufferRetain(_vcp_buf) : %orig;
+}
+- (CVPixelBufferRef)previewPixelBuffer {
+    _vcp_sync();
+    return (_vcp_enabled && _vcp_buf) ? CVPixelBufferRetain(_vcp_buf) : %orig;
+}
 - (CGImageRef)CGImageRepresentation {
-    if (!_vcp_buf) return NULL;
-    CIImage *ci = [CIImage imageWithCVPixelBuffer:_vcp_buf];
-    return [[CIContext contextWithOptions:nil] createCGImage:ci fromRect:ci.extent];
+    _vcp_sync();
+    if (_vcp_enabled && _vcp_buf) {
+        if (!_vcp_ctx) _vcp_ctx = [[CIContext alloc] initWithOptions:nil];
+        CIImage *ci = [CIImage imageWithCVPixelBuffer:_vcp_buf];
+        return [_vcp_ctx createCGImage:ci fromRect:ci.extent];
+    }
+    return %orig;
 }
 - (NSData *)fileDataRepresentation {
-    if (!_vcp_buf) return nil;
-    CIImage *ci = [CIImage imageWithCVPixelBuffer:_vcp_buf];
-    CGImageRef cg = [[CIContext contextWithOptions:nil] createCGImage:ci fromRect:ci.extent];
-    UIImage *ui = [UIImage imageWithCGImage:cg];
-    NSData *d = UIImageJPEGRepresentation(ui, 0.9);
-    CGImageRelease(cg);
-    return d;
-}
-@end
-
-%hook AVCapturePhotoOutput
-- (void)captureOutput:(id)output didFinishProcessingPhoto:(id)photo error:(id)error {
-    if (_vcp_enabled && photo && _vcp_buf) {
-        object_setClass(photo, [VCPFakePhoto class]);
+    _vcp_sync();
+    if (_vcp_enabled && _vcp_buf) {
+        if (!_vcp_ctx) _vcp_ctx = [[CIContext alloc] initWithOptions:nil];
+        CIImage *ci = [CIImage imageWithCVPixelBuffer:_vcp_buf];
+        CGImageRef cg = [_vcp_ctx createCGImage:ci fromRect:ci.extent];
+        UIImage *ui = [UIImage imageWithCGImage:cg];
+        NSData *d = UIImageJPEGRepresentation(ui, 0.9);
+        CGImageRelease(cg);
+        return d;
     }
-    %orig;
+    return %orig;
 }
 %end
 
-%hook AVCapturePhotoSettings
-+ (id)photoSettingsWithFormat:(id)format {
-    id settings = %orig;
-    if (_vcp_enabled) {
-        @try {
-            [settings setValue:@(NO) forKey:@"_highResolutionPhotoEnabled"];
-        } @catch (NSException *e) {}
+@interface VCPVideoProxy : NSObject <AVCaptureVideoDataOutputSampleBufferDelegate>
+@property (nonatomic, strong) id _orig;
+@end
+@implementation VCPVideoProxy
+- (void)captureOutput:(id)o didOutputSampleBuffer:(CMSampleBufferRef)s fromConnection:(id)c {
+    if (_vcp_enabled && _vcp_buf) {
+        _vcp_sync();
+        CMSampleBufferRef nb = NULL;
+        CMFormatDescriptionRef fd = NULL;
+        CMVideoFormatDescriptionCreateForImageBuffer(NULL, _vcp_buf, (CMVideoFormatDescriptionRef *)&fd);
+        CMSampleTimingInfo ti;
+        CMSampleBufferGetSampleTimingInfo(s, 0, &ti);
+        CMSampleBufferCreateForImageBuffer(kCFAllocatorDefault, _vcp_buf, YES, NULL, NULL, (CMVideoFormatDescriptionRef)fd, &ti, &nb);
+        if (nb) {
+            if ([self._orig respondsToSelector:_cmd]) [self._orig captureOutput:o didOutputSampleBuffer:nb fromConnection:c];
+            CFRelease(nb);
+            if (fd) CFRelease(fd);
+            return;
+        }
     }
-    return settings;
+    if ([self._orig respondsToSelector:_cmd]) [self._orig captureOutput:o didOutputSampleBuffer:s fromConnection:c];
+}
+@end
+
+%hook AVCaptureVideoDataOutput
+- (void)setSampleBufferDelegate:(id)d queue:(id)q {
+    if (_vcp_enabled && d && ![d isKindOfClass:[VCPVideoProxy class]]) {
+        VCPVideoProxy *p = [[VCPVideoProxy alloc] init];
+        p._orig = d;
+        objc_setAssociatedObject(self, @selector(setSampleBufferDelegate:queue:), p, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        %orig(p, q);
+    } else %orig;
 }
 %end
 
