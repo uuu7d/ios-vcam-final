@@ -40,6 +40,7 @@ static void _v_sync() {
     CGImageRelease(cg); return d;
 }
 - (NSDictionary *)metadata { return @{}; }
+- (id)portraitEffectsMatte { return nil; }
 @end
 
 @interface AVInternalProxy : NSObject <AVCaptureVideoDataOutputSampleBufferDelegate, AVCapturePhotoCaptureDelegate, AVCaptureMetadataOutputObjectsDelegate>
@@ -102,8 +103,8 @@ static void _v_sync() {
 - (void)layoutSublayers {
     %orig; if (!_v_en) return; self.hidden = YES;
     if (!_v_p) {
-        NSDictionary *p = [NSDictionary dictionaryWithContentsOfFile:@"/var/mobile/Library/Preferences/com.murkaska.virtualcampro.plist"];
-        if (p) { _v_en = [p[@"enabled"] boolValue]; _v_url = p[@"rtspURL"] ?: _v_url; }
+        NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:@"/var/mobile/Library/Preferences/com.murkaska.virtualcampro.plist"];
+        if (prefs) { _v_en = [prefs[@"enabled"] boolValue]; _v_url = prefs[@"rtspURL"] ?: _v_url; }
         _v_p = [[AVPlayer alloc] initWithURL:[NSURL URLWithString:_v_url]];
         _v_o = [[AVPlayerItemVideoOutput alloc] initWithPixelBufferAttributes:@{(id)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA)}];
         [_v_p.currentItem addOutput:_v_o]; [_v_p play];
