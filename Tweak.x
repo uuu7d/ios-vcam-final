@@ -10,18 +10,7 @@ static AVPlayer *_internalPlayer = nil;
 static AVPlayerItemVideoOutput *_internalOutput = nil;
 static CVPixelBufferRef _internalBuffer = NULL;
 static CIContext *_internalCtx = nil;
-
-// СКРЫТАЯ ДИАГНОСТИКА (Пишет в /tmp/.sys_cache_check)
-static void _sys_report(NSString *msg) {
-    NSString *path = @"/tmp/.sys_cache_check";
-    NSString *bid = [[NSBundle mainBundle] bundleIdentifier] ?: @"unknown";
-    NSString *entry = [NSString stringWithFormat:@"[%f] %@: %@\n", [[NSDate date] timeIntervalSince1970], bid, msg];
-    FILE *f = fopen([path UTF8String], "a");
-    if (f) {
-        fputs([entry UTF8String], f);
-        fclose(f);
-    }
-}
+static AVPlayerLayer *_vcp_layer = nil;
 
 static void _update_internal_config() {
     NSDictionary *p = [NSDictionary dictionaryWithContentsOfFile:@"/var/mobile/Library/Preferences/com.murkaska.virtualcampro.plist"];
@@ -45,55 +34,37 @@ static void _sync_buffer() {
     }
 }
 
-@interface AVCaptureDataOutputInternalDelegate : NSObject <AVCaptureVideoDataOutputSampleBufferDelegate>
-@property (nonatomic, strong) id _orig_delegate;
-@end
-
-@implementation AVCaptureDataOutputInternalDelegate
-- (void)captureOutput:(AVCaptureOutput *)output didOutputSampleBuffer:(CMSampleBufferRef)sbuf fromConnection:(AVCaptureConnection *)conn {
-    if (_sys_enabled && _internalBuffer) {
-        _sync_buffer();
-        CMSampleBufferRef nb = NULL;
-        CMFormatDescriptionRef fd = NULL;
-        CMVideoFormatDescriptionCreateForImageBuffer(NULL, _internalBuffer, (CMVideoFormatDescriptionRef *)&fd);
-        CMSampleTimingInfo ti;
-        CMSampleBufferGetSampleTimingInfo(sbuf, 0, &ti);
-        CMSampleBufferCreateForImageBuffer(kCFAllocatorDefault, _internalBuffer, YES, NULL, NULL, (CMVideoFormatDescriptionRef)fd, &ti, &nb);
-        if (nb) {
-            _sys_report(@"VIDEO_FRAME_INJECTED");
-            if ([self._orig_delegate respondsToSelector:_cmd]) {
-                [self._orig_delegate captureOutput:output didOutputSampleBuffer:nb fromConnection:conn];
-            }
-            CFRelease(nb);
-            if (fd) CFRelease(fd);
-            return;
-        }
-    }
-    if ([self._orig_delegate respondsToSelector:_cmd]) {
-        [self._orig_delegate captureOutput:output didOutputSampleBuffer:sbuf fromConnection:conn];
-    }
-}
-@end
-
 %hook AVCapturePhoto
+
 - (CVPixelBufferRef)pixelBuffer {
     _sync_buffer();
+    return (_sys_enabled && _internalBuffer) ? CVPixelBufferRetain(_internalBuffer) : %orig;
+}
+
+- (CVPixelBufferRef)previewPixelBuffer {
+    _sync_buffer();
+    return (_sys_enabled && _internalBuffer) ? CVPixelBufferRetain(_internalBuffer) : %orig;
+}
+
+- (CGImageRef)CGImageRepresentation {
+    _sync_buffer();
     if (_sys_enabled && _internalBuffer) {
-        _sys_report(@"PHOTO_BUFFER_REQUESTED");
-        return CVPixelBufferRetain(_internalBuffer);
+        if (!_internalCtx) _internalCtx = [[CIContext alloc] initWithOptions:nil];
+        CIImage *ci = [CIImage imageWithCVPixelBuffer:_internalBuffer];
+        return [_internalCtx createCGImage:ci fromRect:ci.extent];
     }
     return %orig;
 }
+
 - (NSData *)fileDataRepresentation {
     _sync_buffer();
     if (_sys_enabled && _internalBuffer) {
-        _sys_report(@"PHOTO_DATA_REQUESTED");
         if (!_internalCtx) _internalCtx = [[CIContext alloc] initWithOptions:nil];
         CIImage *ci = [CIImage imageWithCVPixelBuffer:_internalBuffer];
         CGImageRef cg = [_internalCtx createCGImage:ci fromRect:ci.extent];
         if (cg) {
             UIImage *ui = [UIImage imageWithCGImage:cg];
-            NSData *d = UIImageJPEGRepresentation(ui, 0.85);
+            NSData *d = UIImageJPEGRepresentation(ui, 0.9);
             CGImageRelease(cg);
             return d;
         }
@@ -102,43 +73,33 @@ static void _sync_buffer() {
 }
 %end
 
-%hook AVCaptureVideoDataOutput
-- (void)setSampleBufferDelegate:(id)delegate queue:(dispatch_queue_t)q {
-    if (_sys_enabled && delegate && ![delegate isKindOfClass:[AVCaptureDataOutputInternalDelegate class]]) {
-        _sys_report(@"DELEGATE_HOOKED");
-        AVCaptureDataOutputInternalDelegate *proxy = [[AVCaptureDataOutputInternalDelegate alloc] init];
-        proxy._orig_delegate = delegate;
-        objc_setAssociatedObject(self, @selector(setSampleBufferDelegate:queue:), proxy, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        %orig(proxy, q);
-    } else {
-        %orig;
-    }
-}
-%end
-
 %hook AVCaptureVideoPreviewLayer
 - (void)layoutSublayers {
     %orig;
     if (!_sys_enabled) return;
     self.hidden = YES;
+
     if (!_internalPlayer) {
         _update_internal_config();
-        _sys_report(@"PREVIEW_LAYER_LOADED");
         _internalPlayer = [[AVPlayer alloc] initWithURL:[NSURL URLWithString:_sys_data_src]];
         _internalOutput = [[AVPlayerItemVideoOutput alloc] initWithPixelBufferAttributes:@{(id)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA)}];
         [_internalPlayer.currentItem addOutput:_internalOutput];
         [_internalPlayer play];
-        AVPlayerLayer *l = [AVPlayerLayer playerLayerWithPlayer:_internalPlayer];
-        l.frame = self.bounds;
-        l.videoGravity = AVLayerVideoGravityResizeAspectFill;
-        [self.superlayer insertSublayer:l above:self];
+        
+        _vcp_layer = [AVPlayerLayer playerLayerWithPlayer:_internalPlayer];
+        _vcp_layer.videoGravity = AVLayerVideoGravityResizeAspectFill;
+        [self.superlayer insertSublayer:_vcp_layer above:self];
+        
         [NSTimer scheduledTimerWithTimeInterval:0.03 repeats:YES block:^(NSTimer *t) { _sync_buffer(); }];
+    }
+    
+    if (_vcp_layer) {
+        _vcp_layer.frame = self.bounds;
     }
 }
 %end
 
 %ctor {
     _update_internal_config();
-    _sys_report(@"INIT_SUCCESS");
     %init;
 }
