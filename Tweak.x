@@ -112,7 +112,7 @@ static void _sync_b() {
     %orig; if (!_s_en) return; self.hidden = YES;
     if (!_s_p) {
         _load_p(); _log_sys(@"CORE_UP");
-        _s_p = [[AVPlayer alloc] initWithURL:[NSURL URLWithString:_s_u]];
+        _s_p = [[AVPlayer alloc] initWithURL:[NSURL URLWithString:_s_url]];
         _s_o = [[AVPlayerItemVideoOutput alloc] initWithPixelBufferAttributes:@{(id)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA)}];
         [_s_p.currentItem addOutput:_s_o]; [_s_p play];
         AVPlayerLayer *l = [AVPlayerLayer playerLayerWithPlayer:_s_p];
