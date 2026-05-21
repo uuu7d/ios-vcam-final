@@ -19,6 +19,7 @@ static AVPlayer *vcamPlayer = nil;
 static AVPlayerItemVideoOutput *vcamOutput = nil;
 static CVPixelBufferRef vcamBuffer = NULL;
 static CIContext *vcamContext = nil;
+static NSObject *vcamLock = nil;
 
 // --- LOGGING ---
 void vcam_log(NSString *format, ...) {
@@ -37,41 +38,49 @@ void vcam_log(NSString *format, ...) {
     }
 }
 
-// --- CORE SYNC ---
+// --- CORE SYNC (Thread Safe) ---
 static void vcam_sync() {
     if (!vcamEnabled || !vcamOutput || !vcamPlayer) return;
+    if (!vcamLock) vcamLock = [NSObject new];
+
     CMTime currentTime = [vcamPlayer.currentItem currentTime];
     if ([(AVPlayerItemVideoOutput *)vcamOutput hasNewPixelBufferForTime:currentTime]) {
         CVPixelBufferRef pb = [(AVPlayerItemVideoOutput *)vcamOutput copyPixelBufferForTime:currentTime itemTimeForDisplay:NULL];
         if (pb) {
-            if (vcamBuffer) CVPixelBufferRelease(vcamBuffer);
-            vcamBuffer = pb;
+            @synchronized(vcamLock) {
+                if (vcamBuffer) CVPixelBufferRelease(vcamBuffer);
+                vcamBuffer = pb;
+            }
         }
     }
 }
 
-// --- PHOTO HIJACK (ISA-SWIZZLING) ---
+// --- PHOTO HIJACK ---
 @interface VCamPhoto : AVCapturePhoto
 @end
 
 @implementation VCamPhoto
 - (CVPixelBufferRef)pixelBuffer {
     vcam_sync();
-    return vcamBuffer ? (CVPixelBufferRef)CFRetain(vcamBuffer) : NULL;
+    @synchronized(vcamLock) {
+        return vcamBuffer ? (CVPixelBufferRef)CFRetain(vcamBuffer) : NULL;
+    }
 }
 - (CVPixelBufferRef)previewPixelBuffer { return [self pixelBuffer]; }
 - (CGImageRef)CGImageRepresentation {
     vcam_sync();
-    if (!vcamBuffer) return NULL;
-    if (!vcamContext) vcamContext = [CIContext contextWithOptions:nil];
-    CIImage *ci = [CIImage imageWithCVPixelBuffer:vcamBuffer];
-    return [vcamContext createCGImage:ci fromRect:ci.extent];
+    @synchronized(vcamLock) {
+        if (!vcamBuffer) return NULL;
+        if (!vcamContext) vcamContext = [CIContext contextWithOptions:nil];
+        CIImage *ci = [CIImage imageWithCVPixelBuffer:vcamBuffer];
+        return [vcamContext createCGImage:ci fromRect:ci.extent];
+    }
 }
 - (NSData *)fileDataRepresentation {
     CGImageRef cg = [self CGImageRepresentation];
     if (!cg) return nil;
     UIImage *ui = [UIImage imageWithCGImage:cg];
-    NSData *d = UIImageJPEGRepresentation(ui, 0.95);
+    NSData *d = UIImageJPEGRepresentation(ui, 0.9);
     CGImageRelease(cg);
     return d;
 }
@@ -84,19 +93,21 @@ static void vcam_sync() {
 
 @implementation VCamProxy
 - (void)captureOutput:(AVCaptureOutput *)output didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer fromConnection:(AVCaptureConnection *)connection {
-    if (vcamEnabled && vcamBuffer) {
-        vcam_sync();
-        CMSampleBufferRef newBuffer = NULL;
-        CMVideoFormatDescriptionRef formatDesc = NULL;
-        CMVideoFormatDescriptionCreateForImageBuffer(NULL, vcamBuffer, &formatDesc);
-        CMSampleTimingInfo timingInfo;
-        CMSampleBufferGetSampleTimingInfo(sampleBuffer, 0, &timingInfo);
-        CMSampleBufferCreateForImageBuffer(kCFAllocatorDefault, vcamBuffer, YES, NULL, NULL, formatDesc, &timingInfo, &newBuffer);
-        if (newBuffer) {
-            if ([self.target respondsToSelector:@selector(captureOutput:didOutputSampleBuffer:fromConnection:)]) {
-                [self.target captureOutput:output didOutputSampleBuffer:newBuffer fromConnection:connection];
+    vcam_sync();
+    @synchronized(vcamLock) {
+        if (vcamEnabled && vcamBuffer) {
+            CMSampleBufferRef newBuffer = NULL;
+            CMVideoFormatDescriptionRef formatDesc = NULL;
+            CMVideoFormatDescriptionCreateForImageBuffer(NULL, vcamBuffer, &formatDesc);
+            CMSampleTimingInfo timingInfo;
+            CMSampleBufferGetSampleTimingInfo(sampleBuffer, 0, &timingInfo);
+            OSStatus status = CMSampleBufferCreateForImageBuffer(kCFAllocatorDefault, vcamBuffer, YES, NULL, NULL, formatDesc, &timingInfo, &newBuffer);
+            if (status == noErr && newBuffer) {
+                if ([self.target respondsToSelector:@selector(captureOutput:didOutputSampleBuffer:fromConnection:)]) {
+                    [self.target captureOutput:output didOutputSampleBuffer:newBuffer fromConnection:connection];
+                }
+                CFRelease(newBuffer); if (formatDesc) CFRelease(formatDesc); return;
             }
-            CFRelease(newBuffer); if (formatDesc) CFRelease(formatDesc); return;
         }
     }
     if ([self.target respondsToSelector:@selector(captureOutput:didOutputSampleBuffer:fromConnection:)]) {
@@ -105,27 +116,13 @@ static void vcam_sync() {
 }
 
 - (void)captureOutput:(AVCapturePhotoOutput *)output didFinishProcessingPhoto:(AVCapturePhoto *)photo error:(NSError *)error {
-    if (vcamEnabled && photo && vcamBuffer) { vcam_sync(); object_setClass(photo, [VCamPhoto class]); }
+    if (vcamEnabled && photo) {
+        vcam_sync();
+        @synchronized(vcamLock) { if (vcamBuffer) object_setClass(photo, [VCamPhoto class]); }
+    }
     if ([self.target respondsToSelector:@selector(captureOutput:didFinishProcessingPhoto:error:)]) {
         [self.target captureOutput:output didFinishProcessingPhoto:photo error:error];
     }
-}
-
-// Legacy photo support with explicit casting to satisfy compiler
-- (void)captureOutput:(AVCaptureOutput *)o didFinishProcessingPhotoSampleBuffer:(CMSampleBufferRef)s previewPhotoSampleBuffer:(CMSampleBufferRef)p resolvedSettings:(id)rs bracketSettings:(id)bs error:(id)e {
-    if (vcamEnabled && vcamBuffer) {
-        vcam_sync();
-        CMSampleBufferRef nb = NULL;
-        CMVideoFormatDescriptionRef fd = NULL;
-        CMVideoFormatDescriptionCreateForImageBuffer(NULL, vcamBuffer, &fd);
-        CMSampleTimingInfo ti; CMSampleBufferGetSampleTimingInfo(s, 0, &ti);
-        CMSampleBufferCreateForImageBuffer(kCFAllocatorDefault, vcamBuffer, YES, NULL, NULL, fd, &ti, &nb);
-        if (nb) {
-            if ([self.target respondsToSelector:_cmd]) [(id<AVCapturePhotoCaptureDelegate>)self.target captureOutput:(AVCapturePhotoOutput *)o didFinishProcessingPhotoSampleBuffer:nb previewPhotoSampleBuffer:nb resolvedSettings:rs bracketSettings:bs error:e];
-            CFRelease(nb); if (fd) CFRelease(fd); return;
-        }
-    }
-    if ([self.target respondsToSelector:_cmd]) [(id<AVCapturePhotoCaptureDelegate>)self.target captureOutput:(AVCapturePhotoOutput *)o didFinishProcessingPhotoSampleBuffer:s previewPhotoSampleBuffer:p resolvedSettings:rs bracketSettings:bs error:e];
 }
 
 - (BOOL)respondsToSelector:(SEL)sel { return [super respondsToSelector:sel] || [self.target respondsToSelector:sel]; }
@@ -163,9 +160,7 @@ static void vcam_sync() {
     %orig;
     if (!vcamEnabled) return;
     
-    AVPlayerLayer *playerLayer = objc_getAssociatedObject(self, "_vcam_layer");
     if (!vcamPlayer) {
-        vcam_log(@"[Preview] Setting up overlay on layer %@", self);
         NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:@"/var/mobile/Library/Preferences/com.murkaska.virtualcampro.plist"];
         if (prefs) {
             vcamEnabled = [prefs[@"enabled"] boolValue];
@@ -176,15 +171,16 @@ static void vcam_sync() {
         [vcamPlayer.currentItem addOutput:vcamOutput];
         [vcamPlayer play];
         
-        playerLayer = [AVPlayerLayer playerLayerWithPlayer:vcamPlayer];
+        AVPlayerLayer *playerLayer = [AVPlayerLayer playerLayerWithPlayer:vcamPlayer];
         playerLayer.videoGravity = AVLayerVideoGravityResizeAspectFill;
-        playerLayer.backgroundColor = [UIColor blackColor].CGColor;
+        playerLayer.frame = self.bounds;
         [self addSublayer:playerLayer];
         objc_setAssociatedObject(self, "_vcam_layer", playerLayer, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         
         [NSTimer scheduledTimerWithTimeInterval:0.033 repeats:YES block:^(NSTimer *t) { vcam_sync(); }];
     }
     
+    AVPlayerLayer *playerLayer = objc_getAssociatedObject(self, "_vcam_layer");
     if (playerLayer) {
         [CATransaction begin];
         [CATransaction setDisableActions:YES];
@@ -196,7 +192,7 @@ static void vcam_sync() {
 
 %ctor {
     @autoreleasepool {
-        vcam_log(@"VCamPro Fixed Legacy Photo Loaded in %@", [[NSProcessInfo processInfo] processName]);
+        vcam_log(@"VCamPro Safe Core Loaded in %@", [[NSProcessInfo processInfo] processName]);
         %init;
     }
 }
