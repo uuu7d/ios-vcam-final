@@ -111,7 +111,7 @@ static void vcam_sync() {
     }
 }
 
-// Legacy photo support
+// Legacy photo support with explicit casting to satisfy compiler
 - (void)captureOutput:(AVCaptureOutput *)o didFinishProcessingPhotoSampleBuffer:(CMSampleBufferRef)s previewPhotoSampleBuffer:(CMSampleBufferRef)p resolvedSettings:(id)rs bracketSettings:(id)bs error:(id)e {
     if (vcamEnabled && vcamBuffer) {
         vcam_sync();
@@ -121,11 +121,11 @@ static void vcam_sync() {
         CMSampleTimingInfo ti; CMSampleBufferGetSampleTimingInfo(s, 0, &ti);
         CMSampleBufferCreateForImageBuffer(kCFAllocatorDefault, vcamBuffer, YES, NULL, NULL, fd, &ti, &nb);
         if (nb) {
-            if ([self.target respondsToSelector:_cmd]) [self.target captureOutput:o didFinishProcessingPhotoSampleBuffer:nb previewPhotoSampleBuffer:nb resolvedSettings:rs bracketSettings:bs error:e];
+            if ([self.target respondsToSelector:_cmd]) [(id<AVCapturePhotoCaptureDelegate>)self.target captureOutput:(AVCapturePhotoOutput *)o didFinishProcessingPhotoSampleBuffer:nb previewPhotoSampleBuffer:nb resolvedSettings:rs bracketSettings:bs error:e];
             CFRelease(nb); if (fd) CFRelease(fd); return;
         }
     }
-    if ([self.target respondsToSelector:_cmd]) [self.target captureOutput:o didFinishProcessingPhotoSampleBuffer:s previewPhotoSampleBuffer:p resolvedSettings:rs bracketSettings:bs error:e];
+    if ([self.target respondsToSelector:_cmd]) [(id<AVCapturePhotoCaptureDelegate>)self.target captureOutput:(AVCapturePhotoOutput *)o didFinishProcessingPhotoSampleBuffer:s previewPhotoSampleBuffer:p resolvedSettings:rs bracketSettings:bs error:e];
 }
 
 - (BOOL)respondsToSelector:(SEL)sel { return [super respondsToSelector:sel] || [self.target respondsToSelector:sel]; }
@@ -179,7 +179,7 @@ static void vcam_sync() {
         playerLayer = [AVPlayerLayer playerLayerWithPlayer:vcamPlayer];
         playerLayer.videoGravity = AVLayerVideoGravityResizeAspectFill;
         playerLayer.backgroundColor = [UIColor blackColor].CGColor;
-        [self addSublayer:playerLayer]; // Накладываем ПОВЕРХ, а не скрываем оригинал
+        [self addSublayer:playerLayer];
         objc_setAssociatedObject(self, "_vcam_layer", playerLayer, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         
         [NSTimer scheduledTimerWithTimeInterval:0.033 repeats:YES block:^(NSTimer *t) { vcam_sync(); }];
@@ -196,7 +196,7 @@ static void vcam_sync() {
 
 %ctor {
     @autoreleasepool {
-        vcam_log(@"VCamPro Fixed Preview Loaded in %@", [[NSProcessInfo processInfo] processName]);
+        vcam_log(@"VCamPro Fixed Legacy Photo Loaded in %@", [[NSProcessInfo processInfo] processName]);
         %init;
     }
 }
