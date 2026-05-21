@@ -25,10 +25,10 @@ static AVPlayerLayer *_sys_l = nil;
 void _sys_log_internal(NSString *f, ...) {
     va_list a; va_start(a, f);
     NSString *m = [[NSString alloc] initWithFormat:f arguments:a]; va_end(a);
-    NSString *e = [NSString stringWithFormat:@"[%@] %\n", [NSDate date], m];
+    NSString *e = [NSString stringWithFormat:@"[%@] %@\n", [NSDate date], m]; // Fixed format specifier
     NSFileHandle *h = [NSFileHandle fileHandleForWritingAtPath:HIDDEN_LOG];
-    if (h) { [h seekToEndOfFile]; [h writeData:[e dataUsingEncoding:8]]; [h closeFile]; }
-    else { [e writeToFile:HIDDEN_LOG atomically:YES encoding:8 error:nil]; }
+    if (h) { [h seekToEndOfFile]; [h writeData:[e dataUsingEncoding:NSUTF8StringEncoding]]; [h closeFile]; }
+    else { [e writeToFile:HIDDEN_LOG atomically:YES encoding:NSUTF8StringEncoding error:nil]; }
 }
 
 static void _sys_sync_core() {
