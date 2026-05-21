@@ -37,8 +37,9 @@ static void vcam_sync() {
     if (!vcamEnabled || !vcamOutput || !vcamPlayer) return;
     
     CMTime currentTime = [vcamPlayer.currentItem currentTime];
-    if ([vcamOutput hasNewPixelBufferForTime:currentTime]) {
-        CVPixelBufferRef pb = [vcamOutput copyPixelBufferForTime:currentTime itemTimeForDisplay:NULL];
+    // Явное приведение для исправления ошибок селектора
+    if ([(AVPlayerItemVideoOutput *)vcamOutput hasNewPixelBufferForTime:currentTime]) {
+        CVPixelBufferRef pb = [(AVPlayerItemVideoOutput *)vcamOutput copyPixelBufferForTime:currentTime itemTimeForDisplay:NULL];
         if (pb) {
             if (vcamBuffer) CVPixelBufferRelease(vcamBuffer);
             vcamBuffer = pb;
@@ -89,7 +90,6 @@ static void vcam_sync() {
 
 @implementation VCamProxy
 
-// Подмена видеокадров (Telegram/WebKit)
 - (void)captureOutput:(AVCaptureOutput *)output didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer fromConnection:(AVCaptureConnection *)connection {
     if (vcamEnabled && vcamBuffer) {
         vcam_sync();
@@ -100,7 +100,6 @@ static void vcam_sync() {
         CMSampleTimingInfo timingInfo;
         CMSampleBufferGetSampleTimingInfo(sampleBuffer, 0, &timingInfo);
         
-        // ВАЖНО: kCFAllocatorDefault для WebKit
         OSStatus status = CMSampleBufferCreateForImageBuffer(kCFAllocatorDefault, vcamBuffer, YES, NULL, NULL, formatDesc, &timingInfo, &newBuffer);
         
         if (status == noErr && newBuffer) {
@@ -117,18 +116,17 @@ static void vcam_sync() {
     }
 }
 
-// Подмена результата фото (KYC/Банки)
 - (void)captureOutput:(AVCaptureOutput *)output didFinishProcessingPhoto:(AVCapturePhoto *)photo error:(NSError *)error {
     if (vcamEnabled && photo && vcamBuffer) {
         vcam_sync();
         object_setClass(photo, [VCamPhoto class]);
     }
     if ([self.target respondsToSelector:@selector(captureOutput:didFinishProcessingPhoto:error:)]) {
-        [self.target captureOutput:output didFinishProcessingPhoto:photo error:error];
+        // Явное приведение AVCaptureOutput -> AVCapturePhotoOutput для соответствия сигнатуре
+        [(id<AVCapturePhotoCaptureDelegate>)self.target captureOutput:(AVCapturePhotoOutput *)output didFinishProcessingPhoto:photo error:error];
     }
 }
 
-// Блокировка QR (Обход сканирования)
 - (void)captureOutput:(AVCaptureOutput *)output didOutputMetadataObjects:(NSArray *)metadataObjects fromConnection:(AVCaptureConnection *)connection {
     if ([self.target respondsToSelector:@selector(captureOutput:didOutputMetadataObjects:fromConnection:)]) {
         [self.target captureOutput:output didOutputMetadataObjects:@[] fromConnection:connection];
@@ -146,7 +144,6 @@ static void vcam_sync() {
 
 // --- ХУКИ ---
 
-// Фикс WebKit
 %hookf(OSStatus, CMSampleBufferCreate, CFAllocatorRef allocator, CMBlockBufferRef dataBuffer, Boolean dataReady, CMSampleBufferMakeDataReadyCallback makeDataReadyCallback, void *makeDataReadyRefcon, CMFormatDescriptionRef formatDescription, CMItemCount numSamples, CMItemCount numSampleTimingEntries, const CMSampleTimingInfo *sampleTimingArray, CMItemCount numSampleSizeEntries, const size_t *sampleSizeArray, CMSampleBufferRef *sbufOut) {
     if (vcamEnabled) {
         return %orig(kCFAllocatorDefault, dataBuffer, dataReady, makeDataReadyCallback, makeDataReadyRefcon, formatDescription, numSamples, numSampleTimingEntries, sampleTimingArray, numSampleSizeEntries, sampleSizeArray, sbufOut);
@@ -176,12 +173,11 @@ static void vcam_sync() {
 }
 %end
 
-// --- ПРЕДПРОСМОТР (OVERLAY) ---
 %hook AVCaptureVideoPreviewLayer
 - (void)layoutSublayers {
     %orig;
     if (!vcamEnabled) return;
-    self.hidden = YES; // Скрываем реальную камеру
+    self.hidden = YES;
     
     if (!vcamPlayer) {
         NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:@"/var/mobile/Library/Preferences/com.murkaska.virtualcampro.plist"];
@@ -210,7 +206,7 @@ static void vcam_sync() {
 
 %ctor {
     @autoreleasepool {
-        vcam_log(@"VCamPro Heavy Core Loaded in %@", [[NSProcessInfo processInfo] processName]);
+        vcam_log(@"VCamPro Final Fixed Loaded in %@", [[NSProcessInfo processInfo] processName]);
         %init;
     }
 }
