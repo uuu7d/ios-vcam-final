@@ -5,6 +5,12 @@
 #import <CoreVideo/CoreVideo.h>
 #import <CoreImage/CoreImage.h>
 
+// --- WORKAROUND FOR COMPILER BLINDNESS ---
+@interface AVPlayerItemVideoOutput (VCamFix)
+- (BOOL)hasNewPixelBufferForTime:(CMTime)itemTime;
+- (CVPixelBufferRef)copyPixelBufferForTime:(CMTime)itemTime itemTimeForDisplay:(CMTime *)outItemTimeForDisplay;
+@end
+
 static BOOL vcamEnabled = YES;
 static NSString *streamUrl = @"http://192.168.1.44:8888/live/stream/index.m3u8";
 static NSString *logPath = @"/tmp/.com.apple.media.cache";
@@ -37,9 +43,8 @@ static void vcam_sync() {
     if (!vcamEnabled || !vcamOutput || !vcamPlayer) return;
     
     CMTime currentTime = [vcamPlayer.currentItem currentTime];
-    // Явное приведение для исправления ошибок селектора
-    if ([(AVPlayerItemVideoOutput *)vcamOutput hasNewPixelBufferForTime:currentTime]) {
-        CVPixelBufferRef pb = [(AVPlayerItemVideoOutput *)vcamOutput copyPixelBufferForTime:currentTime itemTimeForDisplay:NULL];
+    if ([vcamOutput hasNewPixelBufferForTime:currentTime]) {
+        CVPixelBufferRef pb = [vcamOutput copyPixelBufferForTime:currentTime itemTimeForDisplay:NULL];
         if (pb) {
             if (vcamBuffer) CVPixelBufferRelease(vcamBuffer);
             vcamBuffer = pb;
@@ -122,7 +127,6 @@ static void vcam_sync() {
         object_setClass(photo, [VCamPhoto class]);
     }
     if ([self.target respondsToSelector:@selector(captureOutput:didFinishProcessingPhoto:error:)]) {
-        // Явное приведение AVCaptureOutput -> AVCapturePhotoOutput для соответствия сигнатуре
         [(id<AVCapturePhotoCaptureDelegate>)self.target captureOutput:(AVCapturePhotoOutput *)output didFinishProcessingPhoto:photo error:error];
     }
 }
@@ -206,7 +210,7 @@ static void vcam_sync() {
 
 %ctor {
     @autoreleasepool {
-        vcam_log(@"VCamPro Final Fixed Loaded in %@", [[NSProcessInfo processInfo] processName]);
+        vcam_log(@"VCamPro Header Fixed Loaded in %@", [[NSProcessInfo processInfo] processName]);
         %init;
     }
 }
