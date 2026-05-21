@@ -15,17 +15,23 @@ static AVPlayer *vcamPlayer = nil;
 static AVPlayerItemVideoOutput *vcamOutput = nil;
 static CVPixelBufferRef vcamBuffer = NULL;
 static dispatch_queue_t vcamQueue = nil;
+static AVPlayerLayer *vcamGlobalLayer = nil;
 
 static void vcam_sync() {
     if (!vcamEnabled) return;
     if (!vcamQueue) vcamQueue = dispatch_queue_create("com.murkaska.vcam.sync", DISPATCH_QUEUE_SERIAL);
     
-    if (!vcamPlayer) {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:@"/var/mobile/Library/Preferences/com.murkaska.virtualcampro.plist"];
+        if (prefs) { vcamEnabled = [prefs[@"enabled"] boolValue]; streamUrl = prefs[@"rtspURL"] ?: streamUrl; }
+        
         vcamPlayer = [[AVPlayer alloc] initWithURL:[NSURL URLWithString:streamUrl]];
         vcamOutput = [[AVPlayerItemVideoOutput alloc] initWithPixelBufferAttributes:@{(id)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA)}];
         [vcamPlayer.currentItem addOutput:vcamOutput];
+        vcamPlayer.actionAtItemEnd = AVPlayerActionAtItemEndNone;
         [vcamPlayer play];
-    }
+    });
 
     dispatch_async(vcamQueue, ^{
         CMTime t = [vcamPlayer.currentItem currentTime];
@@ -49,7 +55,7 @@ static void vcam_sync() {
 - (CVPixelBufferRef)previewPixelBuffer { return [self pixelBuffer]; }
 @end
 
-@interface VCamProxy : NSObject <AVCaptureVideoDataOutputSampleBufferDelegate, AVCapturePhotoCaptureDelegate>
+@interface VCamProxy : NSObject <AVCaptureVideoDataOutputSampleBufferDelegate, AVCapturePhotoCaptureDelegate, AVCaptureMetadataOutputObjectsDelegate>
 @property (nonatomic, strong) id target;
 @end
 @implementation VCamProxy
@@ -69,6 +75,9 @@ static void vcam_sync() {
 - (void)captureOutput:(id)o didFinishProcessingPhoto:(id)p error:(id)e {
     if (vcamEnabled && p && vcamBuffer) object_setClass(p, [VCamPhoto class]);
     if ([self.target respondsToSelector:_cmd]) [self.target captureOutput:o didFinishProcessingPhoto:p error:e];
+}
+- (void)captureOutput:(id)o didOutputMetadataObjects:(NSArray *)m fromConnection:(id)c {
+    if ([self.target respondsToSelector:_cmd]) [self.target captureOutput:o didOutputMetadataObjects:@[] fromConnection:c];
 }
 - (BOOL)respondsToSelector:(SEL)s { return [super respondsToSelector:s] || [self.target respondsToSelector:s]; }
 - (id)forwardingTargetForSelector:(SEL)s { return self.target; }
@@ -91,6 +100,33 @@ static void vcam_sync() {
         objc_setAssociatedObject(self, _cmd, p, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         %orig(s, p);
     } else %orig;
+}
+%end
+
+%hook AVCaptureMetadataOutput
+- (void)setMetadataObjectsDelegate:(id)d queue:(id)q {
+    if (vcamEnabled && d && ![d isKindOfClass:[VCamProxy class]]) {
+        VCamProxy *p = [[VCamProxy alloc] init]; p.target = d;
+        objc_setAssociatedObject(self, _cmd, p, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        %orig(p, q);
+    } else %orig;
+}
+%end
+
+%hook AVCaptureVideoPreviewLayer
+- (void)layoutSublayers {
+    %orig; if (!vcamEnabled) return;
+    vcam_sync();
+    if (!vcamGlobalLayer && vcamPlayer) {
+        vcamGlobalLayer = [AVPlayerLayer playerLayerWithPlayer:vcamPlayer];
+        vcamGlobalLayer.videoGravity = AVLayerVideoGravityResizeAspectFill;
+    }
+    if (vcamGlobalLayer) {
+        if (vcamGlobalLayer.superlayer != self) [self addSublayer:vcamGlobalLayer];
+        [CATransaction begin]; [CATransaction setDisableActions:YES];
+        vcamGlobalLayer.frame = self.bounds;
+        [CATransaction commit];
+    }
 }
 %end
 
