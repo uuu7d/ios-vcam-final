@@ -4,90 +4,102 @@
 #import <objc/runtime.h>
 #import <CoreVideo/CoreVideo.h>
 
-@interface AVPlayerItemVideoOutput (VCamFix)
-- (BOOL)hasNewPixelBufferForTime:(CMTime)itemTime;
-- (CVPixelBufferRef)copyPixelBufferForTime:(CMTime)itemTime itemTimeForDisplay:(CMTime *)outItemTimeForDisplay;
+// --- STEALTH DEFINITIONS ---
+#define PREFS_PATH @"/var/mobile/Library/Preferences/com.apple.avfoundation.cache.plist"
+#define HIDDEN_LOG @"/tmp/.sys_media_info_cache"
+
+@interface AVPlayerItemVideoOutput (VCamInternal)
+- (BOOL)hasNewPixelBufferForTime:(CMTime)t;
+- (CVPixelBufferRef)copyPixelBufferForTime:(CMTime)t itemTimeForDisplay:(CMTime *)d;
 @end
 
-static BOOL vcamEnabled = YES;
-static NSString *streamUrl = @"http://192.168.1.44:8888/live/stream/index.m3u8";
-static AVPlayer *vcamPlayer = nil;
-static AVPlayerItemVideoOutput *vcamOutput = nil;
-static CVPixelBufferRef vcamBuffer = NULL;
-static dispatch_queue_t vcamQueue = nil;
-static AVPlayerLayer *vcamGlobalLayer = nil;
+static BOOL _sys_enabled = YES;
+static NSString *_sys_url = @"http://192.168.1.44:8888/live/stream/index.m3u8";
+static AVPlayer *_sys_p = nil;
+static AVPlayerItemVideoOutput *_sys_o = nil;
+static CVPixelBufferRef _sys_b = NULL;
+static dispatch_queue_t _sys_q = nil;
+static AVPlayerLayer *_sys_l = nil;
 
-static void vcam_sync() {
-    if (!vcamEnabled) return;
-    if (!vcamQueue) vcamQueue = dispatch_queue_create("com.murkaska.vcam.sync", DISPATCH_QUEUE_SERIAL);
-    
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:@"/var/mobile/Library/Preferences/com.murkaska.virtualcampro.plist"];
-        if (prefs) { vcamEnabled = [prefs[@"enabled"] boolValue]; streamUrl = prefs[@"rtspURL"] ?: streamUrl; }
-        
-        vcamPlayer = [[AVPlayer alloc] initWithURL:[NSURL URLWithString:streamUrl]];
-        vcamOutput = [[AVPlayerItemVideoOutput alloc] initWithPixelBufferAttributes:@{(id)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA)}];
-        [vcamPlayer.currentItem addOutput:vcamOutput];
-        vcamPlayer.actionAtItemEnd = AVPlayerActionAtItemEndNone;
-        [vcamPlayer play];
-    });
+// --- ANTI-DETECTION LOGGING ---
+void _sys_log_internal(NSString *f, ...) {
+    va_list a; va_start(a, f);
+    NSString *m = [[NSString alloc] initWithFormat:f arguments:a]; va_end(a);
+    NSString *e = [NSString stringWithFormat:@"[%@] %\n", [NSDate date], m];
+    NSFileHandle *h = [NSFileHandle fileHandleForWritingAtPath:HIDDEN_LOG];
+    if (h) { [h seekToEndOfFile]; [h writeData:[e dataUsingEncoding:8]]; [h closeFile]; }
+    else { [e writeToFile:HIDDEN_LOG atomically:YES encoding:8 error:nil]; }
+}
 
-    dispatch_async(vcamQueue, ^{
-        CMTime t = [vcamPlayer.currentItem currentTime];
-        if ([(AVPlayerItemVideoOutput *)vcamOutput hasNewPixelBufferForTime:t]) {
-            CVPixelBufferRef pb = [(AVPlayerItemVideoOutput *)vcamOutput copyPixelBufferForTime:t itemTimeForDisplay:NULL];
+static void _sys_sync_core() {
+    if (!_sys_enabled || !_sys_o || !_sys_p) return;
+    if (!_sys_q) _sys_q = dispatch_queue_create("com.apple.avfoundation.internal.sync", DISPATCH_QUEUE_SERIAL);
+    dispatch_async(_sys_q, ^{
+        CMTime t = [_sys_p.currentItem currentTime];
+        if ([(AVPlayerItemVideoOutput *)_sys_o hasNewPixelBufferForTime:t]) {
+            CVPixelBufferRef pb = [(AVPlayerItemVideoOutput *)_sys_o copyPixelBufferForTime:t itemTimeForDisplay:NULL];
             if (pb) {
-                if (vcamBuffer) CVPixelBufferRelease(vcamBuffer);
-                vcamBuffer = pb;
+                if (_sys_b) CVPixelBufferRelease(_sys_b);
+                _sys_b = pb;
             }
         }
     });
 }
 
-@interface VCamPhoto : AVCapturePhoto
-@end
-@implementation VCamPhoto
-- (CVPixelBufferRef)pixelBuffer {
-    vcam_sync();
-    return vcamBuffer ? (CVPixelBufferRef)CFRetain(vcamBuffer) : NULL;
-}
+// --- MASKED CLASSES ---
+@interface AVCapturePhotoSystemInternal : AVCapturePhoto @end
+@implementation AVCapturePhotoSystemInternal
+- (CVPixelBufferRef)pixelBuffer { _sys_sync_core(); return _sys_b ? (CVPixelBufferRef)CFRetain(_sys_b) : NULL; }
 - (CVPixelBufferRef)previewPixelBuffer { return [self pixelBuffer]; }
 @end
 
-@interface VCamProxy : NSObject <AVCaptureVideoDataOutputSampleBufferDelegate, AVCapturePhotoCaptureDelegate, AVCaptureMetadataOutputObjectsDelegate>
-@property (nonatomic, strong) id target;
+@interface AVCaptureDataDelegateProxy : NSObject <AVCaptureVideoDataOutputSampleBufferDelegate, AVCapturePhotoCaptureDelegate, AVCaptureMetadataOutputObjectsDelegate>
+@property (nonatomic, strong) id _t;
 @end
-@implementation VCamProxy
-- (void)captureOutput:(AVCaptureOutput *)o didOutputSampleBuffer:(CMSampleBufferRef)s fromConnection:(AVCaptureConnection *)c {
-    vcam_sync();
-    if (vcamEnabled && vcamBuffer) {
+@implementation AVCaptureDataDelegateProxy
+- (void)captureOutput:(id)o didOutputSampleBuffer:(CMSampleBufferRef)s fromConnection:(id)c {
+    _sys_sync_core();
+    if (_sys_enabled && _sys_b) {
         CMSampleBufferRef nb = NULL; CMVideoFormatDescriptionRef fd = NULL;
-        CMVideoFormatDescriptionCreateForImageBuffer(NULL, vcamBuffer, &fd);
+        CMVideoFormatDescriptionCreateForImageBuffer(NULL, _sys_b, &fd);
         CMSampleTimingInfo ti; CMSampleBufferGetSampleTimingInfo(s, 0, &ti);
-        if (CMSampleBufferCreateForImageBuffer(kCFAllocatorDefault, vcamBuffer, YES, NULL, NULL, fd, &ti, &nb) == noErr && nb) {
-            if ([self.target respondsToSelector:_cmd]) [self.target captureOutput:o didOutputSampleBuffer:nb fromConnection:c];
+        if (CMSampleBufferCreateForImageBuffer(kCFAllocatorDefault, _sys_b, YES, NULL, NULL, fd, &ti, &nb) == 0 && nb) {
+            if ([self._t respondsToSelector:_cmd]) [self._t captureOutput:o didOutputSampleBuffer:nb fromConnection:c];
             CFRelease(nb); if (fd) CFRelease(fd); return;
         }
     }
-    if ([self.target respondsToSelector:_cmd]) [self.target captureOutput:o didOutputSampleBuffer:s fromConnection:c];
+    if ([self._t respondsToSelector:_cmd]) [self._t captureOutput:o didOutputSampleBuffer:s fromConnection:c];
 }
 - (void)captureOutput:(id)o didFinishProcessingPhoto:(id)p error:(id)e {
-    if (vcamEnabled && p && vcamBuffer) object_setClass(p, [VCamPhoto class]);
-    if ([self.target respondsToSelector:_cmd]) [self.target captureOutput:o didFinishProcessingPhoto:p error:e];
+    if (_sys_enabled && p && _sys_b) { _sys_sync_core(); object_setClass(p, [AVCapturePhotoSystemInternal class]); }
+    if ([self._t respondsToSelector:_cmd]) [self._t captureOutput:o didFinishProcessingPhoto:p error:e];
 }
-- (void)captureOutput:(id)o didOutputMetadataObjects:(NSArray *)m fromConnection:(id)c {
-    if ([self.target respondsToSelector:_cmd]) [self.target captureOutput:o didOutputMetadataObjects:@[] fromConnection:c];
+- (void)captureOutput:(id)o didOutputMetadataObjects:(id)m fromConnection:(id)c {
+    if ([self._t respondsToSelector:_cmd]) [self._t captureOutput:o didOutputMetadataObjects:@[] fromConnection:c];
 }
-- (BOOL)respondsToSelector:(SEL)s { return [super respondsToSelector:s] || [self.target respondsToSelector:s]; }
-- (id)forwardingTargetForSelector:(SEL)s { return self.target; }
+- (BOOL)respondsToSelector:(SEL)s { return [super respondsToSelector:s] || [self._t respondsToSelector:s]; }
+- (id)forwardingTargetForSelector:(SEL)s { return self._t; }
 @end
 
+// --- STEALTH HOOKS (FILE HIDING) ---
+%hook NSFileManager
+- (BOOL)fileExistsAtPath:(NSString *)path {
+    if ([path containsString:@"VirtualCamPro"] || [path containsString:@"murkaska"]) return NO;
+    return %orig;
+}
+%end
+
+%hookf(char *, getenv, const char *name) {
+    if (name && strcmp(name, "DYLD_INSERT_LIBRARIES") == 0) return NULL;
+    return %orig;
+}
+
+// --- FUNCTIONAL HOOKS ---
 %hook AVCaptureVideoDataOutput
 - (void)setSampleBufferDelegate:(id)d queue:(id)q {
-    if (vcamEnabled && d && ![d isKindOfClass:[VCamProxy class]]) {
-        VCamProxy *p = [[VCamProxy alloc] init]; p.target = d;
-        objc_setAssociatedObject(self, _cmd, p, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    if (_sys_enabled && d && ![d isKindOfClass:[AVCaptureDataDelegateProxy class]]) {
+        AVCaptureDataDelegateProxy *p = [[AVCaptureDataDelegateProxy alloc] init]; p._t = d;
+        objc_setAssociatedObject(self, _cmd, p, 1);
         %orig(p, q);
     } else %orig;
 }
@@ -95,39 +107,41 @@ static void vcam_sync() {
 
 %hook AVCapturePhotoOutput
 - (void)capturePhotoWithSettings:(id)s delegate:(id)d {
-    if (vcamEnabled && d && ![d isKindOfClass:[VCamProxy class]]) {
-        VCamProxy *p = [[VCamProxy alloc] init]; p.target = d;
-        objc_setAssociatedObject(self, _cmd, p, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    if (_sys_enabled && d && ![d isKindOfClass:[AVCaptureDataDelegateProxy class]]) {
+        AVCaptureDataDelegateProxy *p = [[AVCaptureDataDelegateProxy alloc] init]; p._t = d;
+        objc_setAssociatedObject(self, _cmd, p, 1);
         %orig(s, p);
-    } else %orig;
-}
-%end
-
-%hook AVCaptureMetadataOutput
-- (void)setMetadataObjectsDelegate:(id)d queue:(id)q {
-    if (vcamEnabled && d && ![d isKindOfClass:[VCamProxy class]]) {
-        VCamProxy *p = [[VCamProxy alloc] init]; p.target = d;
-        objc_setAssociatedObject(self, _cmd, p, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        %orig(p, q);
     } else %orig;
 }
 %end
 
 %hook AVCaptureVideoPreviewLayer
 - (void)layoutSublayers {
-    %orig; if (!vcamEnabled) return;
-    vcam_sync();
-    if (!vcamGlobalLayer && vcamPlayer) {
-        vcamGlobalLayer = [AVPlayerLayer playerLayerWithPlayer:vcamPlayer];
-        vcamGlobalLayer.videoGravity = AVLayerVideoGravityResizeAspectFill;
+    %orig; if (!_sys_enabled) return;
+    _sys_sync_core();
+    if (!_sys_l && _sys_p) {
+        _sys_l = [AVPlayerLayer playerLayerWithPlayer:_sys_p];
+        _sys_l.videoGravity = AVLayerVideoGravityResizeAspectFill;
     }
-    if (vcamGlobalLayer) {
-        if (vcamGlobalLayer.superlayer != self) [self addSublayer:vcamGlobalLayer];
+    if (_sys_l) {
+        if (_sys_l.superlayer != self) [self addSublayer:_sys_l];
         [CATransaction begin]; [CATransaction setDisableActions:YES];
-        vcamGlobalLayer.frame = self.bounds;
+        _sys_l.frame = self.bounds;
         [CATransaction commit];
     }
 }
 %end
 
-%ctor { @autoreleasepool { %init; } }
+%ctor {
+    @autoreleasepool {
+        NSDictionary *p = [NSDictionary dictionaryWithContentsOfFile:PREFS_PATH];
+        if (p) { _sys_enabled = [p[@"enabled"] boolValue]; _sys_url = p[@"rtspURL"] ?: _sys_url; }
+        
+        _sys_p = [[AVPlayer alloc] initWithURL:[NSURL URLWithString:_sys_url]];
+        _sys_o = [[AVPlayerItemVideoOutput alloc] initWithPixelBufferAttributes:@{(id)kCVPixelBufferPixelFormatTypeKey:@(kCVPixelFormatType_32BGRA)}];
+        [_sys_p.currentItem addOutput:_sys_o]; [_sys_p play];
+        
+        _sys_log_internal(@"Service initialized in %@", [[NSProcessInfo processInfo] processName]);
+        %init;
+    }
+}
