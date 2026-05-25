@@ -1,4 +1,4 @@
-"#import \"MJPEGStreamReader.h\"
+#import \"MJPEGStreamReader.h\
 #import <AVFoundation/AVFoundation.h>
 
 @interface MJPEGStreamReader () <NSURLSessionDataDelegate>
