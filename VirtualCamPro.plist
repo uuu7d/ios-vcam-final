@@ -1,8 +1,20 @@
 {
     Filter = {
         Bundles = (
-            "com.apple.camera",
-            "com.apple.mobileslideshow"
+            \"com.apple.camera\",
+            \"com.apple.mobileslideshow\",
+            \"com.apple.facetime\",
+            \"com.burbn.instagram\",
+            \"com.atebits.Tweetie2\",
+            \"com.facebook.Facebook\",
+            \"com.facebook.Messenger\",
+            \"com.snapchat.snapchat\",
+            \"com.zhiliaoapp.musically\",
+            \"us.zoom.videomeetings\",
+            \"com.skype.skype\",
+            \"net.whatsapp.WhatsApp\",
+            \"com.telegram.Telegraph\",
+            \"ph.telegra.Telegraph\",
+            \"com.google.chrome.ios\",
+            \"com.apple.mobilesafari\"
         );
-    };
-}
