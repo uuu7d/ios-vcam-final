@@ -1,20 +1,21 @@
-{
-    Filter = {
-        Bundles = (
-            \"com.apple.camera\",
-            \"com.apple.mobileslideshow\",
-            \"com.apple.facetime\",
-            \"com.burbn.instagram\",
-            \"com.atebits.Tweetie2\",
-            \"com.facebook.Facebook\",
-            \"com.facebook.Messenger\",
-            \"com.snapchat.snapchat\",
-            \"com.zhiliaoapp.musically\",
-            \"us.zoom.videomeetings\",
-            \"com.skype.skype\",
-            \"net.whatsapp.WhatsApp\",
-            \"com.telegram.Telegraph\",
-            \"ph.telegra.Telegraph\",
-            \"com.google.chrome.ios\",
-            \"com.apple.mobilesafari\"
-        );
+<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
+<plist version=\"1.0\">
+<dict>
+    <key>Filter</key>
+    <dict>
+        <key>Classes</key>
+        <array>
+            <string>AVCaptureSession</string>
+            <string>AVCaptureDevice</string>
+            <string>AVCaptureVideoPreviewLayer</string>
+        </array>
+        <key>Executables</key>
+        <array>
+            <string>Camera</string>
+            <string>MobileSlideShow</string>
+            <string>FaceTime</string>
+        </array>
+    </dict>
+</dict>
+</plist>
