@@ -39,7 +39,6 @@ static void _v_ensure_init() {
         [_v_player.currentItem addOutput:_v_output];
         _v_player.actionAtItemEnd = AVPlayerActionAtItemEndNone;
         
-        // Зацикливание стрима
         [[NSNotificationCenter defaultCenter] addObserverForName:AVPlayerItemDidPlayToEndTimeNotification object:_v_player.currentItem queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
             [_v_player seekToTime:kCMTimeZero];
             [_v_player play];
@@ -145,10 +144,16 @@ static void _v_sync() {
     if (!l && _v_player) {
         l = [AVPlayerLayer playerLayerWithPlayer:_v_player];
         l.videoGravity = AVLayerVideoGravityResizeAspectFill;
+        l.zPosition = 1000; // Принудительно на передний план
         [self addSublayer:l];
         objc_setAssociatedObject(self, "_v_l", l, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
-    if (l) { l.frame = self.bounds; [self bringSublayerToFront:l]; }
+    if (l) {
+        [CATransaction begin];
+        [CATransaction setDisableActions:YES];
+        l.frame = self.bounds;
+        [CATransaction commit];
+    }
 }
 %end
 
