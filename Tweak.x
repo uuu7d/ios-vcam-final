@@ -1,37 +1,34 @@
-#import <UIKit/UIKit.h>
+"#import <UIKit/UIKit.h>
 #import <AVFoundation/AVFoundation.h>
 #import <CoreMedia/CoreMedia.h>
 #import <objc/runtime.h>
-#import "MJPEGStreamReader.h"
+#import \"MJPEGStreamReader.h\"
 
-// Глобальные переменные
 static BOOL _enabled = YES;
-static NSString *_url = @"http://192.168.1.44:8888/live/stream/index.m3u8";
+static NSString *_url = @\"http://192.168.1.44:8888/live/stream/index.m3u8\";
 static MJPEGStreamReader *_reader = nil;
 static CVPixelBufferRef _lastBuffer = NULL;
 static dispatch_queue_t _syncQueue = nil;
 static BOOL _initialized = NO;
 
-// Логирование
-#define VCLog(fmt, ...) NSLog(@"[VirtualCamPro] " fmt, ##__VA_ARGS__)
+#define VCLog(fmt, ...) NSLog(@\"[VirtualCamPro] \" fmt, ##__VA_ARGS__)
 
-// Инициализация стрима
 static void _v_init() {
     if (_initialized) return;
     
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        VCLog(@"Initializing virtual camera stream...");
+        VCLog(@\"Initializing virtual camera stream...\");
         
         if (!_syncQueue) {
-            _syncQueue = dispatch_queue_create("com.murkaska.vcam.sync", DISPATCH_QUEUE_SERIAL);
+            _syncQueue = dispatch_queue_create(\"com.murkaska.vcam.sync\", DISPATCH_QUEUE_SERIAL);
         }
         
         _reader = [[MJPEGStreamReader alloc] initWithURL:[NSURL URLWithString:_url]];
         
         _reader.frameCallback = ^(UIImage *image) {
             if (!image) {
-                VCLog(@"Received nil image from stream");
+                VCLog(@\"Received nil image from stream\");
                 return;
             }
             
@@ -53,7 +50,7 @@ static void _v_init() {
                                                   &pb);
             
             if (status != kCVReturnSuccess || !pb) {
-                VCLog(@"Failed to create pixel buffer: %d", status);
+                VCLog(@\"Failed to create pixel buffer: %d\", status);
                 return;
             }
             
@@ -87,16 +84,15 @@ static void _v_init() {
         };
         
         _reader.errorCallback = ^(NSError *error) {
-            VCLog(@"Stream error: %@", error.localizedDescription);
+            VCLog(@\"Stream error: %@\", error.localizedDescription);
         };
         
         [_reader startStreaming];
         _initialized = YES;
-        VCLog(@"Stream started successfully");
+        VCLog(@\"Stream started successfully\");
     });
 }
 
-// Получить текущий буфер
 static CVPixelBufferRef _v_getBuffer() {
     __block CVPixelBufferRef buffer = NULL;
     dispatch_sync(_syncQueue, ^{
@@ -107,8 +103,6 @@ static CVPixelBufferRef _v_getBuffer() {
     return buffer;
 }
 
-// ==================== ХУКИ НА ФОТО ====================
-
 %hook AVCapturePhoto
 
 - (CVPixelBufferRef)pixelBuffer {
@@ -116,7 +110,7 @@ static CVPixelBufferRef _v_getBuffer() {
         _v_init();
         CVPixelBufferRef buffer = _v_getBuffer();
         if (buffer) {
-            VCLog(@"Returning virtual buffer for pixelBuffer");
+            VCLog(@\"Returning virtual buffer for pixelBuffer\");
             return buffer;
         }
     }
@@ -134,7 +128,7 @@ static CVPixelBufferRef _v_getBuffer() {
             NSData *data = UIImageJPEGRepresentation([UIImage imageWithCGImage:cg], 0.95);
             CGImageRelease(cg);
             CVPixelBufferRelease(buffer);
-            VCLog(@"Returning virtual JPEG data (%lu bytes)", (unsigned long)data.length);
+            VCLog(@\"Returning virtual JPEG data (%lu bytes)\", (unsigned long)data.length);
             return data;
         }
     }
@@ -152,7 +146,7 @@ static CVPixelBufferRef _v_getBuffer() {
             NSData *data = UIImageJPEGRepresentation([UIImage imageWithCGImage:cg], 0.95);
             CGImageRelease(cg);
             CVPixelBufferRelease(buffer);
-            VCLog(@"Returning virtual JPEG data with customizer");
+            VCLog(@\"Returning virtual JPEG data with customizer\");
             return data;
         }
     }
@@ -161,12 +155,10 @@ static CVPixelBufferRef _v_getBuffer() {
 
 %end
 
-// ==================== ХУКИ НА PREVIEW ====================
-
 %hook AVCaptureVideoPreviewLayer
 
 - (instancetype)initWithSession:(AVCaptureSession *)session {
-    VCLog(@"AVCaptureVideoPreviewLayer init");
+    VCLog(@\"AVCaptureVideoPreviewLayer init\");
     _v_init();
     return %orig;
 }
@@ -176,7 +168,7 @@ static CVPixelBufferRef _v_getBuffer() {
     
     if (!_enabled) return;
     
-    CALayer *overlay = objc_getAssociatedObject(self, "vcam_overlay");
+    CALayer *overlay = objc_getAssociatedObject(self, \"vcam_overlay\");
     if (!overlay) {
         overlay = [CALayer layer];
         overlay.contentsGravity = kCAGravityResizeAspectFill;
@@ -184,8 +176,8 @@ static CVPixelBufferRef _v_getBuffer() {
         overlay.backgroundColor = [UIColor blackColor].CGColor;
         overlay.opaque = YES;
         [self addSublayer:overlay];
-        objc_setAssociatedObject(self, "vcam_overlay", overlay, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        VCLog(@"Created overlay layer");
+        objc_setAssociatedObject(self, \"vcam_overlay\", overlay, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        VCLog(@\"Created overlay layer\");
     }
     
     [CATransaction begin];
@@ -208,16 +200,14 @@ static CVPixelBufferRef _v_getBuffer() {
 
 %end
 
-// ==================== ХУКИ НА SAMPLE BUFFER (КРИТИЧНО!) ====================
-
 %hook AVCaptureVideoDataOutput
 
 - (void)setSampleBufferDelegate:(id<AVCaptureVideoDataOutputSampleBufferDelegate>)sampleBufferDelegate queue:(dispatch_queue_t)sampleBufferCallbackQueue {
-    VCLog(@"AVCaptureVideoDataOutput setSampleBufferDelegate");
+    VCLog(@\"AVCaptureVideoDataOutput setSampleBufferDelegate\");
     _v_init();
     
     if (_enabled && sampleBufferDelegate) {
-        id proxyDelegate = objc_getAssociatedObject(self, "vcam_proxy");
+        id proxyDelegate = objc_getAssociatedObject(self, \"vcam_proxy\");
         if (!proxyDelegate) {
             proxyDelegate = [[NSObject alloc] init];
             
@@ -259,14 +249,14 @@ static CVPixelBufferRef _v_getBuffer() {
             class_addMethod([proxyDelegate class], 
                           @selector(captureOutput:didOutputSampleBuffer:fromConnection:), 
                           imp, 
-                          "v@:@@@");
+                          \"v@:@@@\");
             
-            objc_setAssociatedObject(self, "vcam_proxy", proxyDelegate, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            objc_setAssociatedObject(self, "vcam_original_delegate", sampleBufferDelegate, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            objc_setAssociatedObject(self, \"vcam_proxy\", proxyDelegate, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            objc_setAssociatedObject(self, \"vcam_original_delegate\", sampleBufferDelegate, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         }
         
         %orig(proxyDelegate, sampleBufferCallbackQueue);
-        VCLog(@"Installed proxy delegate for video output");
+        VCLog(@\"Installed proxy delegate for video output\");
     } else {
         %orig;
     }
@@ -274,61 +264,56 @@ static CVPixelBufferRef _v_getBuffer() {
 
 %end
 
-// ==================== ХУК НА PHOTO OUTPUT ====================
-
 %hook AVCapturePhotoOutput
 
 - (void)capturePhotoWithSettings:(AVCapturePhotoSettings *)settings delegate:(id<AVCapturePhotoCaptureDelegate>)delegate {
-    VCLog(@"Capturing photo with settings");
+    VCLog(@\"Capturing photo with settings\");
     _v_init();
     %orig;
 }
 
 %end
 
-// ==================== ХУК НА СИСТЕМНУЮ КАМЕРУ ====================
-
 %hook CAMPreviewView
 
 - (void)layoutSubviews {
     %orig;
     if (_enabled) {
-        VCLog(@"CAMPreviewView layoutSubviews");
+        VCLog(@\"CAMPreviewView layoutSubviews\");
         _v_init();
     }
 }
 
 %end
 
-// ==================== CONSTRUCTOR ====================
-
 %ctor {
     @autoreleasepool {
         NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
-        VCLog(@"Loading in bundle: %@", bundleID);
+        VCLog(@\"Loading in bundle: %@\", bundleID);
         
-        if (bundleID && ![bundleID hasPrefix:@"com.apple.springboard"]) {
-            NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:@"/var/mobile/Library/Preferences/com.murkaska.virtualcampro.plist"];
+        if (bundleID && ![bundleID hasPrefix:@\"com.apple.springboard\"]) {
+            NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:@\"/var/mobile/Library/Preferences/com.murkaska.virtualcampro.plist\"];
             
             if (prefs) {
-                _enabled = [prefs[@"enabled"] boolValue];
-                NSString *customURL = prefs[@"rtspURL"];
+                _enabled = [prefs[@\"enabled\"] boolValue];
+                NSString *customURL = prefs[@\"rtspURL\"];
                 if (customURL && customURL.length > 0) {
                     _url = customURL;
                 }
-                VCLog(@"Loaded preferences - enabled: %d, URL: %@", _enabled, _url);
+                VCLog(@\"Loaded preferences - enabled: %d, URL: %@\", _enabled, _url);
             }
             
             if (_enabled) {
-                VCLog(@"VirtualCamPro enabled - initializing hooks");
+                VCLog(@\"VirtualCamPro enabled - initializing hooks\");
                 %init;
                 
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                     _v_init();
                 });
             } else {
-                VCLog(@"VirtualCamPro disabled in preferences");
+                VCLog(@\"VirtualCamPro disabled in preferences\");
             }
         }
     }
 }
+"
