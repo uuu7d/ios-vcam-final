@@ -1,5 +1,4 @@
-
-Action: file_editor create /app/vcam-patches/MJPEGStreamReader.h --file-text "// MJPEGStreamReader.h - VirtualCamPro V272.0 (Stage 1 fixes)
+// MJPEGStreamReader.h - VirtualCamPro V272.0 (Stage 1 fixes)
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 #import <CoreVideo/CoreVideo.h>
@@ -27,5 +26,3 @@ typedef void (^MJPEGPixelBufferCallback)(CVPixelBufferRef pixelBuffer);
 @end
 
 NS_ASSUME_NONNULL_END
-"
-Observation: Create successful: /app/vcam-patches/MJPEGStreamReader.h
