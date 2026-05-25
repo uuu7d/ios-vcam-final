@@ -1,46 +1,3 @@
-Причина ошибки
-В файле MJPEGStreamReader.m (а заодно и в .h) в репозиторий закоммичены экранированные литералы вместо реальных символов:
-
-#import \"MJPEGStreamReader.h\    ← так лежит в репо (буквально 4 символа: \, ", H, \)
-#import                            ← а заголовки системных фреймворков просто стёрты
-Это вероятно последствие того, что кто-то правил файл через API/скрипт и забыл сделать unescape. Компилятор видит:
-
-#import без аргумента → "expected FILENAME or <FILENAME>",
-нет импорта <Foundation/Foundation.h> → не находит NSURLSession, BOOL, NSMutableData, NSURLSessionDataDelegate,
-нет импорта <AVFoundation/AVFoundation.h> → не находит AVPlayer, AVPlayerItemVideoOutput,
-нет импорта <UIKit/UIKit.h> → не находит CADisplayLink, UIImage.
-.h файл сломан той же болезнью — #import стоят без содержимого.
-
-Решение — заменить оба файла
-Замени содержимое обоих файлов в репозитории на версии ниже (через GitHub Web UI: открой файл → карандаш → вставь → commit), и билд пойдёт.
-
-✅ MJPEGStreamReader.h (исправлено)
-// MJPEGStreamReader.h - VirtualCamPro V247.0
-#import <Foundation/Foundation.h>
-#import <UIKit/UIKit.h>
-
-NS_ASSUME_NONNULL_BEGIN
-
-typedef void (^MJPEGFrameCallback)(UIImage *frame);
-typedef void (^MJPEGErrorCallback)(NSError *error);
-
-@interface MJPEGStreamReader : NSObject
-
-@property (nonatomic, strong, readonly) NSURL *streamURL;
-@property (nonatomic, assign, readonly) BOOL isConnecting;
-@property (nonatomic, assign, readonly) NSUInteger frameCount;
-@property (nonatomic, assign, readonly) CFAbsoluteTime lastFrameTime;
-@property (nonatomic, copy, nullable) MJPEGFrameCallback frameCallback;
-@property (nonatomic, copy, nullable) MJPEGErrorCallback errorCallback;
-
-- (instancetype)initWithURL:(NSURL *)url;
-- (void)startStreaming;
-- (void)stopStreaming;
-
-@end
-
-NS_ASSUME_NONNULL_END
-✅ MJPEGStreamReader.m (исправлено)
 // MJPEGStreamReader.m - VirtualCamPro V247.0
 #import "MJPEGStreamReader.h"
 #import <AVFoundation/AVFoundation.h>
@@ -107,8 +64,6 @@ NS_ASSUME_NONNULL_END
         [self stopMJPEGStream];
     }
 }
-
-#pragma mark - HLS
 
 - (void)startHLSStream {
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -180,8 +135,6 @@ NS_ASSUME_NONNULL_END
     });
 }
 
-#pragma mark - MJPEG
-
 - (void)startMJPEGStream {
     NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
     config.timeoutIntervalForRequest = 30.0;
@@ -232,9 +185,9 @@ didReceiveResponse:(NSURLResponse *)response
 
     if (startRange.location != NSNotFound && endRange.location != NSNotFound && endRange.location > startRange.location) {
         NSRange imageRange = NSMakeRange(startRange.location, endRange.location + endMarker.length - startRange.location);
-        NSData *imageData = [self.imageData subdataWithRange:imageRange];
+        NSData *imgData = [self.imageData subdataWithRange:imageRange];
 
-        UIImage *image = [UIImage imageWithData:imageData];
+        UIImage *image = [UIImage imageWithData:imgData];
         if (image) {
             if (self.frameCallback) {
                 dispatch_async(dispatch_get_main_queue(), ^{
