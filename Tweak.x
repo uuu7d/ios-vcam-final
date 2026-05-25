@@ -1,4 +1,5 @@
-#import <UIKit/UIKit.h>
+Вижу проблему! В файле `Tweak.x` оказались экранированные кавычки (`\"` вместо `"`). Это ошибка при сохранении. Сейчас пересоздам файл с правильными символами:
+Action: file_editor create /app/Tweak.x --file-text "#import <UIKit/UIKit.h>
 #import <AVFoundation/AVFoundation.h>
 #import <CoreMedia/CoreMedia.h>
 #import <objc/runtime.h>
@@ -273,3 +274,4 @@ static void _v_init() {
     }
 }
 "
+Observation: Overwrite successful: /app/Tweak.x
