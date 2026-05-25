@@ -18,7 +18,6 @@ static void _v_init() {
     _reader.frameCallback = ^(UIImage *image) {
         if (!image) return;
         CVPixelBufferRef pb = NULL;
-        // ВАЖНО: Добавляем kCVPixelBufferIOSurfacePropertiesKey для отображения в CALayer
         NSDictionary *options = @{
             (id)kCVPixelBufferCGImageCompatibilityKey: @YES,
             (id)kCVPixelBufferCGBitmapContextCompatibilityKey: @YES,
@@ -43,7 +42,7 @@ static void _v_init() {
     [_reader startStreaming];
 }
 
-// --- ХУКИ НА ФОТО (СОХРАНЕНИЕ ИЗ СТРИМА) ---
+// --- ХУКИ НА ФОТО ---
 %hook AVCapturePhoto
 - (CVPixelBufferRef)pixelBuffer {
     @synchronized(_v_lock) {
@@ -51,13 +50,11 @@ static void _v_init() {
     }
     return %orig;
 }
-
 - (NSData *)fileDataRepresentation {
     @synchronized(_v_lock) {
         if (_enabled && _lastBuffer) {
             CIImage *ci = [CIImage imageWithCVPixelBuffer:_lastBuffer];
-            CIContext *ctx = [CIContext contextWithOptions:nil];
-            CGImageRef cg = [ctx createCGImage:ci fromRect:ci.extent];
+            CGImageRef cg = [[CIContext contextWithOptions:nil] createCGImage:ci fromRect:ci.extent];
             NSData *d = UIImageJPEGRepresentation([UIImage imageWithCGImage:cg], 0.9);
             CGImageRelease(cg);
             return d;
@@ -67,41 +64,7 @@ static void _v_init() {
 }
 %end
 
-// --- ХУКИ НА ВЫВОД ВИДЕО ---
-@interface VCamProxy : NSObject <AVCaptureVideoDataOutputSampleBufferDelegate>
-@property (nonatomic, strong) id target;
-@end
-@implementation VCamProxy
-- (void)captureOutput:(id)o didOutputSampleBuffer:(CMSampleBufferRef)s fromConnection:(id)c {
-    _v_init();
-    @synchronized(_v_lock) {
-        if (_enabled && _lastBuffer) {
-            CMSampleBufferRef nb = NULL; CMVideoFormatDescriptionRef fd = NULL;
-            CMVideoFormatDescriptionCreateForImageBuffer(NULL, _lastBuffer, &fd);
-            CMSampleTimingInfo ti; CMSampleBufferGetSampleTimingInfo(s, 0, &ti);
-            if (CMSampleBufferCreateForImageBuffer(kCFAllocatorDefault, _lastBuffer, YES, NULL, NULL, fd, &ti, &nb) == noErr && nb) {
-                if ([self.target respondsToSelector:_cmd]) [self.target captureOutput:o didOutputSampleBuffer:nb fromConnection:c];
-                CFRelease(nb); if (fd) CFRelease(fd); return;
-            }
-        }
-    }
-    if ([self.target respondsToSelector:_cmd]) [self.target captureOutput:o didOutputSampleBuffer:s fromConnection:c];
-}
-- (BOOL)respondsToSelector:(SEL)s { return [super respondsToSelector:s] || [self.target respondsToSelector:s]; }
-- (id)forwardingTargetForSelector:(SEL)s { return self.target; }
-@end
-
-%hook AVCaptureVideoDataOutput
-- (void)setSampleBufferDelegate:(id)d queue:(id)q {
-    if (_enabled && d && ![d isKindOfClass:[VCamProxy class]]) {
-        VCamProxy *p = [[VCamProxy alloc] init]; p.target = d;
-        objc_setAssociatedObject(self, _cmd, p, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        %orig(p, q);
-    } else %orig;
-}
-%end
-
-// --- ХУК НА ПРЕДПРОСМОТР ---
+// --- ХУКИ НА ПРЕДПРОСМОТР (Persistence) ---
 %hook AVCaptureVideoPreviewLayer
 - (void)layoutSublayers {
     %orig;
@@ -112,29 +75,46 @@ static void _v_init() {
     if (!overlay) {
         overlay = [CALayer layer];
         overlay.contentsGravity = kCAGravityResizeAspectFill;
-        overlay.zPosition = 99999;
+        overlay.zPosition = 999999;
+        overlay.backgroundColor = [UIColor blackColor].CGColor;
         [self addSublayer:overlay];
         objc_setAssociatedObject(self, "_v_overlay", overlay, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     
+    // ПРИНУДИТЕЛЬНО ПЕРЕКРЫВАЕМ ВСЁ
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
     overlay.frame = self.bounds;
+    overlay.hidden = NO;
+    overlay.opacity = 1.0;
     
     @synchronized(_v_lock) {
         if (_lastBuffer) {
-            [CATransaction begin];
-            [CATransaction setDisableActions:YES];
             overlay.contents = (__bridge id)CVPixelBufferGetIOSurface(_lastBuffer);
-            [CATransaction commit];
         }
     }
+    [CATransaction commit];
+}
+%end
+
+// --- СПЕЦИАЛЬНЫЙ ХУК ДЛЯ СИСТЕМНОЙ КАМЕРЫ APPLE ---
+%hook CAMPreviewView
+- (void)layoutSubviews {
+    %orig;
+    if (!_enabled) return;
+    UIView *v = (UIView *)self;
+    CALayer *l = v.layer;
+    if (l) [l setNeedsLayout];
 }
 %end
 
 %ctor {
-    NSString *bid = [[NSBundle mainBundle] bundleIdentifier];
-    if (bid && ![bid hasPrefix:@"com.apple.springboard"]) {
-        NSDictionary *p = [NSDictionary dictionaryWithContentsOfFile:@"/var/mobile/Library/Preferences/com.murkaska.virtualcampro.plist"];
-        if (p) { _enabled = [p[@"enabled"] boolValue]; _url = p[@"rtspURL"] ?: _url; }
-        if (_enabled) %init;
+    @autoreleasepool {
+        NSString *bid = [[NSBundle mainBundle] bundleIdentifier];
+        if (bid && ![bid hasPrefix:@"com.apple.springboard"]) {
+            NSDictionary *p = [NSDictionary dictionaryWithContentsOfFile:@"/var/mobile/Library/Preferences/com.murkaska.virtualcampro.plist"];
+            if (p) { _enabled = [p[@"enabled"] boolValue]; _url = p[@"rtspURL"] ?: _url; }
+            if (_enabled) %init;
+        }
     }
 }
