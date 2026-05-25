@@ -1,222 +1,246 @@
-// MJPEGStreamReader.m - VirtualCamPro V271.2: Optimized for RTSP MJPEG
+// MJPEGStreamReader.m - Enhanced version with HLS support
 #import "MJPEGStreamReader.h"
-#import <objc/runtime.h>
-#import <objc/message.h>
-
-static void VCamLog(NSString *format, ...) {
-    va_list args;
-    va_start(args, format);
-    NSString *msg = [[NSString alloc] initWithFormat:format arguments:args];
-    va_end(args);
-    NSString *line = [NSString stringWithFormat:@"[MJPEGReader] %@\n", msg];
-    NSLog(@"%@", line);
-    @try {
-        NSString *path = @"/tmp/vcam_mjpeg.log";
-        if (![[NSFileManager defaultManager] fileExistsAtPath:path]) {
-            [@"" writeToFile:path atomically:YES encoding:NSUTF8StringEncoding error:nil];
-        }
-        NSFileHandle *fh = [NSFileHandle fileHandleForWritingAtPath:path];
-        if (fh) {
-            [fh seekToEndOfFile];
-            [fh writeData:[line dataUsingEncoding:NSUTF8StringEncoding]];
-            [fh closeFile];
-        }
-    } @catch (NSException *e) {}
-}
+#import <AVFoundation/AVFoundation.h>
 
 @interface MJPEGStreamReader () <NSURLSessionDataDelegate>
-@property (nonatomic, strong, readwrite) NSURL *streamURL;
-@property (nonatomic, assign, readwrite) BOOL isConnecting;
-@property (nonatomic, assign, readwrite) NSUInteger frameCount;
-@property (nonatomic, assign, readwrite) CFAbsoluteTime lastFrameTime;
-@property (nonatomic, strong, nullable) NSURLSession *session;
-@property (nonatomic, strong, nullable) NSURLSessionDataTask *dataTask;
-@property (nonatomic, strong) NSMutableData *receiveBuffer;
-@property (nonatomic, strong) dispatch_queue_t parseQueue;
-@property (nonatomic, assign) NSUInteger bytesReceived;
-@property (nonatomic, strong) NSString *boundaryMarker;
+@property (nonatomic, strong) NSURLSession *session;
+@property (nonatomic, strong) NSURLSessionDataTask *task;
+@property (nonatomic, strong) NSMutableData *imageData;
+@property (nonatomic, assign) BOOL isRunning;
+@property (nonatomic, strong) AVPlayer *hlsPlayer;
+@property (nonatomic, strong) AVPlayerItemVideoOutput *videoOutput;
+@property (nonatomic, strong) CADisplayLink *displayLink;
+@property (nonatomic, assign) BOOL isHLS;
 @end
 
 @implementation MJPEGStreamReader
 
 - (instancetype)initWithURL:(NSURL *)url {
-    if (self = [super init]) {
+    self = [super init];
+    if (self) {
         _streamURL = url;
-        _receiveBuffer = [[NSMutableData alloc] init];
-        _parseQueue = dispatch_queue_create("com.vcam.mjpeg.parse", DISPATCH_QUEUE_SERIAL);
-        _bytesReceived = 0;
-        VCamLog(@"Initialized with URL: %@", url);
+        _isConnecting = NO;
+        _frameCount = 0;
+        _lastFrameTime = 0;
+        
+        // Определяем тип стрима
+        NSString *urlString = url.absoluteString.lowercaseString;
+        _isHLS = [urlString hasSuffix:@".m3u8"] || [urlString containsString:@".m3u8"];
+        
+        NSLog(@"[VCamStream] Initialized with URL: %@, type: %@", url, _isHLS ? @"HLS" : @"MJPEG");
     }
     return self;
 }
 
 - (void)startStreaming {
-    [self stopStreaming];
-    self.isConnecting = YES;
-    VCamLog(@"🚀 Starting MJPEG stream from: %@", self.streamURL);
-    
-    NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
-    config.requestCachePolicy = NSURLRequestReloadIgnoringLocalCacheData;
-    config.timeoutIntervalForResource = 0; // Infinite stream
-    config.timeoutIntervalForRequest = 30;
-    config.HTTPMaximumConnectionsPerHost = 1;
-    config.waitsForConnectivity = YES;
-    config.HTTPShouldUsePipelining = NO;
-    
-    // Force ATS bypass
-    @try {
-        SEL sel = NSSelectorFromString(@"_setAllowsArbitraryLoads:");
-        if ([config respondsToSelector:sel]) {
-            ((void (*)(id, SEL, BOOL))objc_msgSend)(config, sel, YES);
-            VCamLog(@"ATS bypass applied to URLSessionConfiguration");
-        }
-    } @catch (NSException *e) {
-        VCamLog(@"⚠️ ATS bypass failed: %@", e);
-    }
-
-    self.session = [NSURLSession sessionWithConfiguration:config delegate:self delegateQueue:nil];
-    self.dataTask = [self.session dataTaskWithURL:self.streamURL];
-    [self.dataTask resume];
-    VCamLog(@"HTTP GET request initiated");
-}
-
-- (void)stopStreaming {
-    self.isConnecting = NO;
-    [self.dataTask cancel];
-    [self.session invalidateAndCancel];
-    self.session = nil;
-    dispatch_async(self.parseQueue, ^{ [self.receiveBuffer setLength:0]; });
-    VCamLog(@"⏹ Stream stopped");
-}
-
-// ===== NSURLSessionDataDelegate methods =====
-
-- (void)URLSession:(NSURLSession *)session 
-          dataTask:(NSURLSessionDataTask *)dataTask 
-    didReceiveResponse:(NSURLResponse *)response 
-     completionHandler:(void (^)(NSURLSessionResponseDisposition))completionHandler {
-    
-    NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
-    NSString *contentType = [httpResponse valueForHTTPHeaderField:@"Content-Type"];
-    
-    VCamLog(@"📡 HTTP Response | Status: %ld | Content-Type: %@", 
-        httpResponse.statusCode, contentType);
-    
-    if (httpResponse.statusCode != 200) {
-        VCamLog(@"❌ HTTP Error: %ld", httpResponse.statusCode);
-        completionHandler(NSURLSessionResponseCancel);
+    if (_isRunning) {
+        NSLog(@"[VCamStream] Already streaming");
         return;
     }
     
-    // Extract boundary marker if multipart/x-mixed-replace
-    if ([contentType containsString:@"multipart"]) {
-        NSRange boundaryRange = [contentType rangeOfString:@"boundary="];
-        if (boundaryRange.location != NSNotFound) {
-            NSString *boundary = [contentType substringFromIndex:boundaryRange.location + boundaryRange.length];
-            boundary = [boundary stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-            self.boundaryMarker = boundary;
-            VCamLog(@"Boundary detected: %@", boundary);
-        }
-    }
+    _isRunning = YES;
+    _isConnecting = YES;
     
+    NSLog(@"[VCamStream] Starting %@ stream...", _isHLS ? @"HLS" : @"MJPEG");
+    
+    if (_isHLS) {
+        [self startHLSStream];
+    } else {
+        [self startMJPEGStream];
+    }
+}
+
+- (void)stopStreaming {
+    NSLog(@"[VCamStream] Stopping stream...");
+    _isRunning = NO;
+    _isConnecting = NO;
+    
+    if (_isHLS) {
+        [self stopHLSStream];
+    } else {
+        [self stopMJPEGStream];
+    }
+}
+
+#pragma mark - HLS Stream
+
+- (void)startHLSStream {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        AVPlayerItem *playerItem = [AVPlayerItem playerItemWithURL:self.streamURL];
+        self.hlsPlayer = [AVPlayer playerWithPlayerItem:playerItem];
+        
+        // Настройка video output
+        NSDictionary *pixelBufferAttributes = @{
+            (id)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA),
+            (id)kCVPixelBufferIOSurfacePropertiesKey: @{}
+        };
+        
+        self.videoOutput = [[AVPlayerItemVideoOutput alloc] initWithPixelBufferAttributes:pixelBufferAttributes];
+        [playerItem addOutput:self.videoOutput];
+        
+        // Запускаем проигрывание
+        [self.hlsPlayer play];
+        
+        // Создаем display link для извлечения фреймов
+        self.displayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(displayLinkCallback:)];
+        [self.displayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
+        
+        self.isConnecting = NO;
+        NSLog(@"[VCamStream] HLS player started");
+        
+        // Наблюдаем за статусом
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                               selector:@selector(playerItemDidReachEnd:)
+                                                   name:AVPlayerItemDidPlayToEndTimeNotification
+                                                 object:playerItem];
+    });
+}
+
+- (void)displayLinkCallback:(CADisplayLink *)sender {
+    if (!self.isRunning) return;
+    
+    CMTime currentTime = [self.hlsPlayer currentTime];
+    CVPixelBufferRef pixelBuffer = [self.videoOutput copyPixelBufferForItemTime:currentTime itemTimeForDisplay:nil];
+    
+    if (pixelBuffer) {
+        // Конвертируем в UIImage
+        CIImage *ciImage = [CIImage imageWithCVPixelBuffer:pixelBuffer];
+        CIContext *context = [CIContext contextWithOptions:nil];
+        CGImageRef cgImage = [context createCGImage:ciImage fromRect:ciImage.extent];
+        UIImage *image = [UIImage imageWithCGImage:cgImage];
+        CGImageRelease(cgImage);
+        CVPixelBufferRelease(pixelBuffer);
+        
+        if (self.frameCallback) {
+            self.frameCallback(image);
+        }
+        
+        self->_frameCount++;
+        self->_lastFrameTime = CFAbsoluteTimeGetCurrent();
+    }
+}
+
+- (void)playerItemDidReachEnd:(NSNotification *)notification {
+    NSLog(@"[VCamStream] HLS stream ended, restarting...");
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self.hlsPlayer seekToTime:kCMTimeZero];
+        [self.hlsPlayer play];
+    });
+}
+
+- (void)stopHLSStream {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [[NSNotificationCenter defaultCenter] removeObserver:self];
+        [self.displayLink invalidate];
+        self.displayLink = nil;
+        [self.hlsPlayer pause];
+        self.hlsPlayer = nil;
+        self.videoOutput = nil;
+    });
+}
+
+#pragma mark - MJPEG Stream
+
+- (void)startMJPEGStream {
+    NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
+    config.timeoutIntervalForRequest = 30.0;
+    config.timeoutIntervalForResource = 300.0;
+    config.HTTPMaximumConnectionsPerHost = 1;
+    
+    self.session = [NSURLSession sessionWithConfiguration:config delegate:self delegateQueue:nil];
+    self.imageData = [NSMutableData data];
+    
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:self.streamURL];
+    [request setValue:@"multipart/x-mixed-replace" forHTTPHeaderField:@"Accept"];
+    
+    self.task = [self.session dataTaskWithRequest:request];
+    [self.task resume];
+    
+    NSLog(@"[VCamStream] MJPEG stream task started");
+}
+
+- (void)stopMJPEGStream {
+    [self.task cancel];
+    self.task = nil;
+    [self.session invalidateAndCancel];
+    self.session = nil;
+    self.imageData = nil;
+}
+
+#pragma mark - NSURLSessionDataDelegate (MJPEG)
+
+- (void)URLSession:(NSURLSession *)session dataTask:(NSURLSessionDataTask *)dataTask didReceiveResponse:(NSURLResponse *)response completionHandler:(void (^)(NSURLSessionResponseDisposition))completionHandler {
+    self->_isConnecting = NO;
+    NSLog(@"[VCamStream] MJPEG connected successfully");
     completionHandler(NSURLSessionResponseAllow);
 }
 
 - (void)URLSession:(NSURLSession *)session dataTask:(NSURLSessionDataTask *)dataTask didReceiveData:(NSData *)data {
-    dispatch_async(self.parseQueue, ^{
-        [self.receiveBuffer appendData:data];
-        self.bytesReceived += data.length;
-        
-        if (self.bytesReceived % 512000 == 0) { // Log every 500KB
-            VCamLog(@"📊 Received %lu KB | Buffer: %lu KB", 
-                self.bytesReceived / 1024, 
-                self.receiveBuffer.length / 1024);
-        }
-        
-        [self parseJPEGFrames];
-    });
-}
-
-- (void)parseJPEGFrames {
-    const uint8_t *bytes = (const uint8_t *)self.receiveBuffer.bytes;
-    NSUInteger len = self.receiveBuffer.length;
+    if (!self.isRunning) return;
     
-    // Find JPEG Start of Image (SOI): 0xFF 0xD8
-    NSInteger soi = -1;
-    if (len > 2) {
-        for (NSUInteger i = 0; i <= len - 2; i++) {
-            if (bytes[i] == 0xFF && bytes[i+1] == 0xD8) { 
-                soi = i; 
-                break;
-            }
-        }
-    }
+    [self.imageData appendData:data];
     
-    if (soi != -1) {
-        // Find JPEG End of Image (EOI): 0xFF 0xD9
-        NSInteger eoi = -1;
-        if (len > soi + 2) {
-            for (NSUInteger i = soi + 2; i <= len - 2; i++) {
-                if (bytes[i] == 0xFF && bytes[i+1] == 0xD9) { 
-                    eoi = i; 
-                    break;
-                }
-            }
-        }
+    // Ищем JPEG границы
+    NSData *startMarker = [NSData dataWithBytes:(unsigned char[]){0xFF, 0xD8} length:2];
+    NSData *endMarker = [NSData dataWithBytes:(unsigned char[]){0xFF, 0xD9} length:2];
+    
+    NSRange startRange = [self.imageData rangeOfData:startMarker options:0 range:NSMakeRange(0, self.imageData.length)];
+    NSRange endRange = [self.imageData rangeOfData:endMarker options:0 range:NSMakeRange(0, self.imageData.length)];
+    
+    if (startRange.location != NSNotFound && endRange.location != NSNotFound && endRange.location > startRange.location) {
+        NSRange imageRange = NSMakeRange(startRange.location, endRange.location + endMarker.length - startRange.location);
+        NSData *imageData = [self.imageData subdataWithRange:imageRange];
         
-        if (eoi != -1) {
-            NSData *jpg = [self.receiveBuffer subdataWithRange:NSMakeRange(soi, eoi - soi + 2)];
-            UIImage *img = [UIImage imageWithData:jpg];
-            
-            if (img) {
-                self.frameCount++;
-                self.lastFrameTime = CFAbsoluteTimeGetCurrent();
-                
-                if (self.frameCount % 15 == 0 || self.frameCount <= 3) {
-                    VCamLog(@"✅ Frame #%lu decoded | Size: %@ | Data: %lu bytes", 
-                        self.frameCount, 
-                        NSStringFromCGSize(img.size), 
-                        jpg.length);
-                }
-                
-                if (self.frameCallback) {
-                    dispatch_async(dispatch_get_main_queue(), ^{ 
-                        self.frameCallback(img); 
-                    });
-                }
-            } else {
-                if (self.frameCount < 5) {
-                    VCamLog(@"⚠️ Failed to decode JPEG | Size: %lu bytes | SOI: %ld | EOI: %ld", 
-                        jpg.length, soi, eoi);
-                }
+        UIImage *image = [UIImage imageWithData:imageData];
+        if (image) {
+            if (self.frameCallback) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    self.frameCallback(image);
+                });
             }
             
-            // Remove processed data from buffer
-            [self.receiveBuffer replaceBytesInRange:NSMakeRange(0, eoi + 2) withBytes:NULL length:0];
+            self->_frameCount++;
+            self->_lastFrameTime = CFAbsoluteTimeGetCurrent();
         }
+        
+        // Удаляем обработанные данные
+        [self.imageData replaceBytesInRange:NSMakeRange(0, endRange.location + endMarker.length) withBytes:NULL length:0];
     }
     
-    // Prevent memory leak
-    if (self.receiveBuffer.length > 1024 * 1024 * 32) { // 32 MB limit
-        VCamLog(@"⚠️ Buffer overflow (%lu MB), clearing", self.receiveBuffer.length / (1024*1024));
-        [self.receiveBuffer setLength:0];
+    // Ограничиваем размер буфера
+    if (self.imageData.length > 10 * 1024 * 1024) {
+        [self.imageData setLength:0];
+        NSLog(@"[VCamStream] Buffer overflow, cleared");
     }
 }
 
 - (void)URLSession:(NSURLSession *)session task:(NSURLSessionTask *)task didCompleteWithError:(NSError *)error {
-    if (error && self.isConnecting) {
-        VCamLog(@"❌ Stream disconnected: %@ (Code: %ld)", error.localizedDescription, error.code);
+    if (error) {
+        NSLog(@"[VCamStream] MJPEG stream error: %@", error.localizedDescription);
         
-        // Auto-reconnect after 3 seconds
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            if (self.isConnecting) {
-                VCamLog(@"🔄 Auto-reconnecting...");
-                [self startStreaming];
-            }
-        });
-    } else if (!error) {
-        VCamLog(@"Stream completed normally");
+        if (self.errorCallback) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                self.errorCallback(error);
+            });
+        }
+        
+        // Автоматическое переподключение
+        if (self.isRunning) {
+            NSLog(@"[VCamStream] Reconnecting in 3 seconds...");
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                if (self.isRunning) {
+                    [self startMJPEGStream];
+                }
+            });
+        }
+    } else {
+        NSLog(@"[VCamStream] MJPEG stream ended normally");
     }
 }
 
+- (void)dealloc {
+    [self stopStreaming];
+}
+
 @end
+
