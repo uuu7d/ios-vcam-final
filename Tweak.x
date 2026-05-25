@@ -18,7 +18,13 @@ static void _v_init() {
     _reader.frameCallback = ^(UIImage *image) {
         if (!image) return;
         CVPixelBufferRef pb = NULL;
-        NSDictionary *options = @{(id)kCVPixelBufferCGImageCompatibilityKey: @YES, (id)kCVPixelBufferCGBitmapContextCompatibilityKey: @YES};
+        // ВАЖНО: Добавляем kCVPixelBufferIOSurfacePropertiesKey для отображения в CALayer
+        NSDictionary *options = @{
+            (id)kCVPixelBufferCGImageCompatibilityKey: @YES,
+            (id)kCVPixelBufferCGBitmapContextCompatibilityKey: @YES,
+            (id)kCVPixelBufferIOSurfacePropertiesKey: @{}
+        };
+        
         CVPixelBufferCreate(kCFAllocatorDefault, image.size.width, image.size.height, kCVPixelFormatType_32BGRA, (__bridge CFDictionaryRef)options, &pb);
         if (pb) {
             CVPixelBufferLockBaseAddress(pb, 0);
@@ -37,7 +43,31 @@ static void _v_init() {
     [_reader startStreaming];
 }
 
-// --- PROXY DELEGATE ---
+// --- ХУКИ НА ФОТО (СОХРАНЕНИЕ ИЗ СТРИМА) ---
+%hook AVCapturePhoto
+- (CVPixelBufferRef)pixelBuffer {
+    @synchronized(_v_lock) {
+        if (_enabled && _lastBuffer) return (CVPixelBufferRef)CFRetain(_lastBuffer);
+    }
+    return %orig;
+}
+
+- (NSData *)fileDataRepresentation {
+    @synchronized(_v_lock) {
+        if (_enabled && _lastBuffer) {
+            CIImage *ci = [CIImage imageWithCVPixelBuffer:_lastBuffer];
+            CIContext *ctx = [CIContext contextWithOptions:nil];
+            CGImageRef cg = [ctx createCGImage:ci fromRect:ci.extent];
+            NSData *d = UIImageJPEGRepresentation([UIImage imageWithCGImage:cg], 0.9);
+            CGImageRelease(cg);
+            return d;
+        }
+    }
+    return %orig;
+}
+%end
+
+// --- ХУКИ НА ВЫВОД ВИДЕО ---
 @interface VCamProxy : NSObject <AVCaptureVideoDataOutputSampleBufferDelegate>
 @property (nonatomic, strong) id target;
 @end
@@ -49,7 +79,7 @@ static void _v_init() {
             CMSampleBufferRef nb = NULL; CMVideoFormatDescriptionRef fd = NULL;
             CMVideoFormatDescriptionCreateForImageBuffer(NULL, _lastBuffer, &fd);
             CMSampleTimingInfo ti; CMSampleBufferGetSampleTimingInfo(s, 0, &ti);
-            if (CMSampleBufferCreateForImageBuffer(kCFAllocatorDefault, _lastBuffer, YES, NULL, NULL, fd, &ti, &nb) == 0 && nb) {
+            if (CMSampleBufferCreateForImageBuffer(kCFAllocatorDefault, _lastBuffer, YES, NULL, NULL, fd, &ti, &nb) == noErr && nb) {
                 if ([self.target respondsToSelector:_cmd]) [self.target captureOutput:o didOutputSampleBuffer:nb fromConnection:c];
                 CFRelease(nb); if (fd) CFRelease(fd); return;
             }
@@ -61,7 +91,6 @@ static void _v_init() {
 - (id)forwardingTargetForSelector:(SEL)s { return self.target; }
 @end
 
-// --- HOOKS ---
 %hook AVCaptureVideoDataOutput
 - (void)setSampleBufferDelegate:(id)d queue:(id)q {
     if (_enabled && d && ![d isKindOfClass:[VCamProxy class]]) {
@@ -72,19 +101,18 @@ static void _v_init() {
 }
 %end
 
+// --- ХУК НА ПРЕДПРОСМОТР ---
 %hook AVCaptureVideoPreviewLayer
 - (void)layoutSublayers {
     %orig;
     if (!_enabled) return;
     _v_init();
     
-    // ПРИНУДИТЕЛЬНО ПЕРЕКРЫВАЕМ ОРИГИНАЛ
     CALayer *overlay = objc_getAssociatedObject(self, "_v_overlay");
     if (!overlay) {
         overlay = [CALayer layer];
         overlay.contentsGravity = kCAGravityResizeAspectFill;
         overlay.zPosition = 99999;
-        overlay.backgroundColor = [UIColor blackColor].CGColor;
         [self addSublayer:overlay];
         objc_setAssociatedObject(self, "_v_overlay", overlay, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
