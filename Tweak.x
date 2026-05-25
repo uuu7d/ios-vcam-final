@@ -24,19 +24,22 @@ static void _v_ensure_init() {
     dispatch_once(&once, ^{
         _v_player = [[AVPlayer alloc] initWithURL:[NSURL URLWithString:_v_url]];
         _v_output = [[AVPlayerItemVideoOutput alloc] initWithPixelBufferAttributes:@{(id)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA)}];
+        
+        // Ждем готовности плеера, чтобы не вешать процесс
         [_v_player.currentItem addOutput:_v_output];
         _v_player.actionAtItemEnd = AVPlayerActionAtItemEndNone;
         [_v_player play];
+        
         _v_queue = dispatch_queue_create("com.murkaska.vcam.sync", DISPATCH_QUEUE_SERIAL);
     });
 }
 
 static void _v_sync() {
-    if (!_v_player || !_v_output) return;
+    if (!_v_player || !_v_output || !_v_queue) return;
     dispatch_async(_v_queue, ^{
         CMTime t = [_v_player.currentItem currentTime];
-        if ([(AVPlayerItemVideoOutput *)_v_output hasNewPixelBufferForTime:t]) {
-            CVPixelBufferRef pb = [(AVPlayerItemVideoOutput *)_v_output copyPixelBufferForTime:t itemTimeForDisplay:NULL];
+        if ([_v_output hasNewPixelBufferForTime:t]) {
+            CVPixelBufferRef pb = [_v_output copyPixelBufferForTime:t itemTimeForDisplay:NULL];
             if (pb) {
                 if (_v_buffer) CVPixelBufferRelease(_v_buffer);
                 _v_buffer = pb;
@@ -55,10 +58,12 @@ static void _v_sync() {
 @interface VCamDelegateProxy : NSObject <AVCaptureVideoDataOutputSampleBufferDelegate, AVCapturePhotoCaptureDelegate>
 @property (nonatomic, strong) id target;
 @end
+
 @implementation VCamDelegateProxy
 - (void)captureOutput:(id)o didOutputSampleBuffer:(CMSampleBufferRef)s fromConnection:(id)c {
     _v_sync();
-    if (_v_buffer) {
+    // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: если буфер пустой, отдаем оригинал, чтобы не было вылета
+    if (_v_enabled && _v_buffer) {
         CMSampleBufferRef nb = NULL; CMVideoFormatDescriptionRef fd = NULL;
         CMVideoFormatDescriptionCreateForImageBuffer(NULL, _v_buffer, &fd);
         CMSampleTimingInfo ti; CMSampleBufferGetSampleTimingInfo(s, 0, &ti);
@@ -69,10 +74,15 @@ static void _v_sync() {
     }
     if ([self.target respondsToSelector:_cmd]) [self.target captureOutput:o didOutputSampleBuffer:s fromConnection:c];
 }
+
 - (void)captureOutput:(id)o didFinishProcessingPhoto:(id)p error:(id)e {
-    if (p && _v_buffer) object_setClass(p, [VCamPhotoSystem class]);
+    if (_v_enabled && p && _v_buffer) {
+        _v_sync();
+        object_setClass(p, [VCamPhotoSystem class]);
+    }
     if ([self.target respondsToSelector:_cmd]) [self.target captureOutput:o didFinishProcessingPhoto:p error:e];
 }
+
 - (BOOL)respondsToSelector:(SEL)s { return [super respondsToSelector:s] || [self.target respondsToSelector:s]; }
 - (id)forwardingTargetForSelector:(SEL)s { return self.target; }
 @end
@@ -80,7 +90,7 @@ static void _v_sync() {
 // --- HOOKS ---
 %hook AVCaptureVideoDataOutput
 - (void)setSampleBufferDelegate:(id)d queue:(id)q {
-    if (d && ![d isKindOfClass:[VCamDelegateProxy class]]) {
+    if (_v_enabled && d && ![d isKindOfClass:[VCamDelegateProxy class]]) {
         _v_ensure_init();
         VCamDelegateProxy *p = [[VCamDelegateProxy alloc] init]; p.target = d;
         objc_setAssociatedObject(self, _cmd, p, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
@@ -91,7 +101,7 @@ static void _v_sync() {
 
 %hook AVCapturePhotoOutput
 - (void)capturePhotoWithSettings:(id)s delegate:(id)d {
-    if (d && ![d isKindOfClass:[VCamDelegateProxy class]]) {
+    if (_v_enabled && d && ![d isKindOfClass:[VCamDelegateProxy class]]) {
         _v_ensure_init();
         VCamDelegateProxy *p = [[VCamDelegateProxy alloc] init]; p.target = d;
         objc_setAssociatedObject(self, _cmd, p, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
@@ -103,6 +113,7 @@ static void _v_sync() {
 %hook AVCaptureVideoPreviewLayer
 - (void)layoutSublayers {
     %orig;
+    if (!_v_enabled) return;
     _v_ensure_init();
     AVPlayerLayer *l = objc_getAssociatedObject(self, "_v_l");
     if (!l && _v_player) {
@@ -110,7 +121,6 @@ static void _v_sync() {
         l.videoGravity = AVLayerVideoGravityResizeAspectFill;
         [self addSublayer:l];
         objc_setAssociatedObject(self, "_v_l", l, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        [NSTimer scheduledTimerWithTimeInterval:0.033 repeats:YES block:^(NSTimer *t) { _v_sync(); }];
     }
     if (l) {
         [CATransaction begin]; [CATransaction setDisableActions:YES];
@@ -123,22 +133,17 @@ static void _v_sync() {
 %ctor {
     @autoreleasepool {
         NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
-        // КАТЕГОРИЧЕСКИ запрещаем запуск в SpringBoard, backboardd и других системных демонах
         if (!bundleID || [bundleID hasPrefix:@"com.apple.springboard"] || 
-            [bundleID hasPrefix:@"com.apple.backboard"] || 
-            [bundleID hasPrefix:@"com.apple.mediaserverd"]) {
+            [bundleID hasPrefix:@"com.apple.backboard"]) {
             return;
         }
         
-        // Загружаем настройки
         NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:@"/var/mobile/Library/Preferences/com.murkaska.virtualcampro.plist"];
         if (prefs) {
             _v_enabled = prefs[@"enabled"] ? [prefs[@"enabled"] boolValue] : _v_enabled;
             _v_url = prefs[@"rtspURL"] ?: _v_url;
         }
         
-        if (_v_enabled) {
-            %init;
-        }
+        if (_v_enabled) %init;
     }
 }
