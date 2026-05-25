@@ -8,12 +8,13 @@ static BOOL _enabled = YES;
 static NSString *_url = @"http://192.168.1.44:8888/live/stream/index.m3u8";
 static MJPEGStreamReader *_reader = nil;
 static CVPixelBufferRef _lastBuffer = NULL;
+static id _v_lock = nil;
 
 static void _v_init() {
     if (_reader) return;
-    _reader = [[MJPEGStreamReader alloc] initWithURL:[NSURL URLWithString:_url]];
+    if (!_v_lock) _v_lock = [NSObject new];
     
-    // Правильная установка колбэка согласно MJPEGStreamReader.h
+    _reader = [[MJPEGStreamReader alloc] initWithURL:[NSURL URLWithString:_url]];
     _reader.frameCallback = ^(UIImage *image) {
         if (!image) return;
         CVPixelBufferRef pb = NULL;
@@ -27,29 +28,31 @@ static void _v_init() {
             CGContextRelease(ctx);
             CVPixelBufferUnlockBaseAddress(pb, 0);
             
-            if (_lastBuffer) CVPixelBufferRelease(_lastBuffer);
-            _lastBuffer = pb;
+            @synchronized(_v_lock) {
+                if (_lastBuffer) CVPixelBufferRelease(_lastBuffer);
+                _lastBuffer = pb;
+            }
         }
     };
-    
     [_reader startStreaming];
 }
 
-// --- ХУКИ НА ВЫВОД ДАННЫХ ---
+// --- PROXY DELEGATE ---
 @interface VCamProxy : NSObject <AVCaptureVideoDataOutputSampleBufferDelegate>
 @property (nonatomic, strong) id target;
 @end
-
 @implementation VCamProxy
 - (void)captureOutput:(id)o didOutputSampleBuffer:(CMSampleBufferRef)s fromConnection:(id)c {
     _v_init();
-    if (_enabled && _lastBuffer) {
-        CMSampleBufferRef nb = NULL; CMVideoFormatDescriptionRef fd = NULL;
-        CMVideoFormatDescriptionCreateForImageBuffer(NULL, _lastBuffer, &fd);
-        CMSampleTimingInfo ti; CMSampleBufferGetSampleTimingInfo(s, 0, &ti);
-        if (CMSampleBufferCreateForImageBuffer(kCFAllocatorDefault, _lastBuffer, YES, NULL, NULL, fd, &ti, &nb) == 0 && nb) {
-            if ([self.target respondsToSelector:_cmd]) [self.target captureOutput:o didOutputSampleBuffer:nb fromConnection:c];
-            CFRelease(nb); if (fd) CFRelease(fd); return;
+    @synchronized(_v_lock) {
+        if (_enabled && _lastBuffer) {
+            CMSampleBufferRef nb = NULL; CMVideoFormatDescriptionRef fd = NULL;
+            CMVideoFormatDescriptionCreateForImageBuffer(NULL, _lastBuffer, &fd);
+            CMSampleTimingInfo ti; CMSampleBufferGetSampleTimingInfo(s, 0, &ti);
+            if (CMSampleBufferCreateForImageBuffer(kCFAllocatorDefault, _lastBuffer, YES, NULL, NULL, fd, &ti, &nb) == 0 && nb) {
+                if ([self.target respondsToSelector:_cmd]) [self.target captureOutput:o didOutputSampleBuffer:nb fromConnection:c];
+                CFRelease(nb); if (fd) CFRelease(fd); return;
+            }
         }
     }
     if ([self.target respondsToSelector:_cmd]) [self.target captureOutput:o didOutputSampleBuffer:s fromConnection:c];
@@ -58,9 +61,10 @@ static void _v_init() {
 - (id)forwardingTargetForSelector:(SEL)s { return self.target; }
 @end
 
+// --- HOOKS ---
 %hook AVCaptureVideoDataOutput
 - (void)setSampleBufferDelegate:(id)d queue:(id)q {
-    if (d && ![d isKindOfClass:[VCamProxy class]]) {
+    if (_enabled && d && ![d isKindOfClass:[VCamProxy class]]) {
         VCamProxy *p = [[VCamProxy alloc] init]; p.target = d;
         objc_setAssociatedObject(self, _cmd, p, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         %orig(p, q);
@@ -73,10 +77,27 @@ static void _v_init() {
     %orig;
     if (!_enabled) return;
     _v_init();
-    if (_lastBuffer) {
-        [CATransaction begin]; [CATransaction setDisableActions:YES];
-        self.contents = (__bridge id)CVPixelBufferGetIOSurface(_lastBuffer);
-        [CATransaction commit];
+    
+    // ПРИНУДИТЕЛЬНО ПЕРЕКРЫВАЕМ ОРИГИНАЛ
+    CALayer *overlay = objc_getAssociatedObject(self, "_v_overlay");
+    if (!overlay) {
+        overlay = [CALayer layer];
+        overlay.contentsGravity = kCAGravityResizeAspectFill;
+        overlay.zPosition = 99999;
+        overlay.backgroundColor = [UIColor blackColor].CGColor;
+        [self addSublayer:overlay];
+        objc_setAssociatedObject(self, "_v_overlay", overlay, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    
+    overlay.frame = self.bounds;
+    
+    @synchronized(_v_lock) {
+        if (_lastBuffer) {
+            [CATransaction begin];
+            [CATransaction setDisableActions:YES];
+            overlay.contents = (__bridge id)CVPixelBufferGetIOSurface(_lastBuffer);
+            [CATransaction commit];
+        }
     }
 }
 %end
