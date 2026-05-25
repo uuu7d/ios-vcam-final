@@ -7,7 +7,8 @@ NS_ASSUME_NONNULL_BEGIN
 typedef void (^MJPEGFrameCallback)(UIImage *frame);
 typedef void (^MJPEGErrorCallback)(NSError *error);
 
-@interface MJPEGStreamReader : NSObject <NSURLSessionDataDelegate>
+@interface MJPEGStreamReader : NSObject
+
 @property (nonatomic, strong, readonly) NSURL *streamURL;
 @property (nonatomic, assign, readonly) BOOL isConnecting;
 @property (nonatomic, assign, readonly) NSUInteger frameCount;
@@ -18,6 +19,7 @@ typedef void (^MJPEGErrorCallback)(NSError *error);
 - (instancetype)initWithURL:(NSURL *)url;
 - (void)startStreaming;
 - (void)stopStreaming;
+
 @end
 
 NS_ASSUME_NONNULL_END
