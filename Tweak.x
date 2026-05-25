@@ -12,7 +12,9 @@ static CVPixelBufferRef _lastBuffer = NULL;
 static void _v_init() {
     if (_reader) return;
     _reader = [[MJPEGStreamReader alloc] initWithURL:[NSURL URLWithString:_url]];
-    [_reader startWithCompletion:^(UIImage *image) {
+    
+    // Правильная установка колбэка согласно MJPEGStreamReader.h
+    _reader.frameCallback = ^(UIImage *image) {
         if (!image) return;
         CVPixelBufferRef pb = NULL;
         NSDictionary *options = @{(id)kCVPixelBufferCGImageCompatibilityKey: @YES, (id)kCVPixelBufferCGBitmapContextCompatibilityKey: @YES};
@@ -28,7 +30,9 @@ static void _v_init() {
             if (_lastBuffer) CVPixelBufferRelease(_lastBuffer);
             _lastBuffer = pb;
         }
-    }];
+    };
+    
+    [_reader startStreaming];
 }
 
 // --- ХУКИ НА ВЫВОД ДАННЫХ ---
