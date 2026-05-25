@@ -117,7 +117,7 @@ static CVPixelBufferRef _v_getBuffer() {
         CVPixelBufferRef buffer = _v_getBuffer();
         if (buffer) {
             VCLog(@"Returning virtual buffer for pixelBuffer");
-            return buffer; // Уже retained
+            return buffer;
         }
     }
     return %orig;
@@ -217,16 +217,13 @@ static CVPixelBufferRef _v_getBuffer() {
     _v_init();
     
     if (_enabled && sampleBufferDelegate) {
-        // Создаем прокси делегат
         id proxyDelegate = objc_getAssociatedObject(self, "vcam_proxy");
         if (!proxyDelegate) {
             proxyDelegate = [[NSObject alloc] init];
             
-            // Добавляем метод captureOutput:didOutputSampleBuffer:fromConnection:
             IMP imp = imp_implementationWithBlock(^(id _self, AVCaptureOutput *output, CMSampleBufferRef sampleBuffer, AVCaptureConnection *connection) {
                 CVPixelBufferRef virtualBuffer = _v_getBuffer();
                 if (virtualBuffer) {
-                    // Создаем новый sample buffer с нашим pixel buffer
                     CMSampleBufferRef newSampleBuffer = NULL;
                     CMSampleTimingInfo timing = {
                         .duration = CMTimeMake(1, 30),
@@ -301,17 +298,6 @@ static CVPixelBufferRef _v_getBuffer() {
     }
 }
 
-- (void)setHidden:(BOOL)hidden {
-    if (_enabled && !hidden) {
-        VCLog(@"CAMPreviewView setHidden: NO - forcing layer update");
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [self.layer setNeedsLayout];
-            [self.layer layoutIfNeeded];
-        });
-    }
-    %orig;
-}
-
 %end
 
 // ==================== CONSTRUCTOR ====================
@@ -337,7 +323,6 @@ static CVPixelBufferRef _v_getBuffer() {
                 VCLog(@"VirtualCamPro enabled - initializing hooks");
                 %init;
                 
-                // Преинициализация стрима
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                     _v_init();
                 });
@@ -347,4 +332,3 @@ static CVPixelBufferRef _v_getBuffer() {
         }
     }
 }
-
