@@ -1,106 +1,85 @@
+#import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 #import <AVFoundation/AVFoundation.h>
 #import <CoreMedia/CoreMedia.h>
+#import <CoreVideo/CoreVideo.h>
+#import <CoreImage/CoreImage.h>
+#import <QuartzCore/QuartzCore.h>
 #import <objc/runtime.h>
 #import "MJPEGStreamReader.h"
 
 static BOOL _enabled = YES;
-static NSString *_url = @"http://192.168.1.44:8888/live/stream/index.m3u8";
+static NSString *_url = @"http://192.168.1.44:8888/live";
 static MJPEGStreamReader *_reader = nil;
 static CVPixelBufferRef _lastBuffer = NULL;
 static dispatch_queue_t _syncQueue = nil;
+static CIContext *_ciContext = nil;
 static BOOL _initialized = NO;
 
 #define VCLog(fmt, ...) NSLog(@"[VirtualCamPro] " fmt, ##__VA_ARGS__)
 
-static void _v_init() {
+static void _v_init(void) {
     if (_initialized) return;
-    
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        VCLog(@"Initializing virtual camera stream...");
-        
-        if (!_syncQueue) {
-            _syncQueue = dispatch_queue_create("com.murkaska.vcam.sync", DISPATCH_QUEUE_SERIAL);
-        }
-        
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        VCLog(@"Init stream, URL=%@", _url);
+        _syncQueue = dispatch_queue_create("com.murkaska.vcam.sync", DISPATCH_QUEUE_SERIAL);
+        _ciContext = [CIContext contextWithOptions:nil];
+
         _reader = [[MJPEGStreamReader alloc] initWithURL:[NSURL URLWithString:_url]];
-        
+
         _reader.frameCallback = ^(UIImage *image) {
-            if (!image) {
-                VCLog(@"Received nil image from stream");
-                return;
-            }
-            
+            if (!image) return;
+
+            CGFloat w = image.size.width;
+            CGFloat h = image.size.height;
             CVPixelBufferRef pb = NULL;
-            NSDictionary *options = @{
+            NSDictionary *opts = @{
                 (id)kCVPixelBufferCGImageCompatibilityKey: @YES,
                 (id)kCVPixelBufferCGBitmapContextCompatibilityKey: @YES,
                 (id)kCVPixelBufferIOSurfacePropertiesKey: @{}
             };
-            
-            CGFloat width = image.size.width;
-            CGFloat height = image.size.height;
-            
-            CVReturn status = CVPixelBufferCreate(kCFAllocatorDefault, 
-                                                  (size_t)width, 
-                                                  (size_t)height, 
-                                                  kCVPixelFormatType_32BGRA, 
-                                                  (__bridge CFDictionaryRef)options, 
-                                                  &pb);
-            
-            if (status != kCVReturnSuccess || !pb) {
-                VCLog(@"Failed to create pixel buffer: %d", status);
+
+            if (CVPixelBufferCreate(kCFAllocatorDefault,(size_t)w,(size_t)h,
+                                    kCVPixelFormatType_32BGRA,
+                                    (__bridge CFDictionaryRef)opts, &pb) != kCVReturnSuccess || !pb) {
                 return;
             }
-            
+
             CVPixelBufferLockBaseAddress(pb, 0);
             void *data = CVPixelBufferGetBaseAddress(pb);
-            size_t bytesPerRow = CVPixelBufferGetBytesPerRow(pb);
-            
-            CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
-            CGContextRef ctx = CGBitmapContextCreate(data, 
-                                                     (size_t)width, 
-                                                     (size_t)height, 
-                                                     8, 
-                                                     bytesPerRow,
-                                                     colorSpace, 
-                                                     kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little);
-            CGColorSpaceRelease(colorSpace);
-            
+            size_t bpr = CVPixelBufferGetBytesPerRow(pb);
+            CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
+            CGContextRef ctx = CGBitmapContextCreate(data,(size_t)w,(size_t)h,8,bpr,cs,
+                                                     kCGImageAlphaPremultipliedFirst|kCGBitmapByteOrder32Little);
+            CGColorSpaceRelease(cs);
             if (ctx) {
-                CGContextDrawImage(ctx, CGRectMake(0, 0, width, height), image.CGImage);
+                CGContextDrawImage(ctx, CGRectMake(0,0,w,h), image.CGImage);
                 CGContextRelease(ctx);
             }
-            
             CVPixelBufferUnlockBaseAddress(pb, 0);
-            
+
             dispatch_sync(_syncQueue, ^{
-                if (_lastBuffer) {
-                    CVPixelBufferRelease(_lastBuffer);
-                }
+                if (_lastBuffer) CVPixelBufferRelease(_lastBuffer);
                 _lastBuffer = pb;
             });
         };
-        
-        _reader.errorCallback = ^(NSError *error) {
-            VCLog(@"Stream error: %@", error.localizedDescription);
+
+        _reader.errorCallback = ^(NSError *e) {
+            VCLog(@"Stream error: %@", e.localizedDescription);
         };
-        
+
         [_reader startStreaming];
         _initialized = YES;
-        VCLog(@"Stream started successfully");
     });
 }
 
-static CVPixelBufferRef _v_getBuffer() {
-    __block CVPixelBufferRef buffer = NULL;
+static CVPixelBufferRef _v_getBuffer(void) {
+    __block CVPixelBufferRef buf = NULL;
     dispatch_sync(_syncQueue, ^{
-        if (_lastBuffer) {
-            buffer = (CVPixelBufferRef)CFRetain(_lastBuffer);
-        }
+        if (_lastBuffer) buf = (CVPixelBufferRef)CFRetain(_lastBuffer);
     });
-    return buffer;
+    return buf;
 }
 
 %hook AVCapturePhoto
@@ -108,11 +87,8 @@ static CVPixelBufferRef _v_getBuffer() {
 - (CVPixelBufferRef)pixelBuffer {
     if (_enabled) {
         _v_init();
-        CVPixelBufferRef buffer = _v_getBuffer();
-        if (buffer) {
-            VCLog(@"Returning virtual buffer for pixelBuffer");
-            return buffer;
-        }
+        CVPixelBufferRef b = _v_getBuffer();
+        if (b) return b;
     }
     return %orig;
 }
@@ -120,34 +96,30 @@ static CVPixelBufferRef _v_getBuffer() {
 - (NSData *)fileDataRepresentation {
     if (_enabled) {
         _v_init();
-        CVPixelBufferRef buffer = _v_getBuffer();
-        if (buffer) {
-            CIImage *ci = [CIImage imageWithCVPixelBuffer:buffer];
-            CIContext *context = [CIContext contextWithOptions:nil];
-            CGImageRef cg = [context createCGImage:ci fromRect:ci.extent];
-            NSData *data = UIImageJPEGRepresentation([UIImage imageWithCGImage:cg], 0.95);
+        CVPixelBufferRef b = _v_getBuffer();
+        if (b) {
+            CIImage *ci = [CIImage imageWithCVPixelBuffer:b];
+            CGImageRef cg = [_ciContext createCGImage:ci fromRect:ci.extent];
+            NSData *d = UIImageJPEGRepresentation([UIImage imageWithCGImage:cg], 0.95);
             CGImageRelease(cg);
-            CVPixelBufferRelease(buffer);
-            VCLog(@"Returning virtual JPEG data (%lu bytes)", (unsigned long)data.length);
-            return data;
+            CVPixelBufferRelease(b);
+            return d;
         }
     }
     return %orig;
 }
 
-- (NSData *)fileDataRepresentationWithCustomizer:(id)customizer {
+- (NSData *)fileDataRepresentationWithCustomizer:(id)c {
     if (_enabled) {
         _v_init();
-        CVPixelBufferRef buffer = _v_getBuffer();
-        if (buffer) {
-            CIImage *ci = [CIImage imageWithCVPixelBuffer:buffer];
-            CIContext *context = [CIContext contextWithOptions:nil];
-            CGImageRef cg = [context createCGImage:ci fromRect:ci.extent];
-            NSData *data = UIImageJPEGRepresentation([UIImage imageWithCGImage:cg], 0.95);
+        CVPixelBufferRef b = _v_getBuffer();
+        if (b) {
+            CIImage *ci = [CIImage imageWithCVPixelBuffer:b];
+            CGImageRef cg = [_ciContext createCGImage:ci fromRect:ci.extent];
+            NSData *d = UIImageJPEGRepresentation([UIImage imageWithCGImage:cg], 0.95);
             CGImageRelease(cg);
-            CVPixelBufferRelease(buffer);
-            VCLog(@"Returning virtual JPEG data with customizer");
-            return data;
+            CVPixelBufferRelease(b);
+            return d;
         }
     }
     return %orig;
@@ -157,17 +129,18 @@ static CVPixelBufferRef _v_getBuffer() {
 
 %hook AVCaptureVideoPreviewLayer
 
-- (instancetype)initWithSession:(AVCaptureSession *)session {
-    VCLog(@"AVCaptureVideoPreviewLayer init");
+- (instancetype)initWithSession:(AVCaptureSession *)s {
     _v_init();
     return %orig;
 }
 
 - (void)layoutSublayers {
     %orig;
-    
     if (!_enabled) return;
-    
+
+    CVPixelBufferRef buf = _v_getBuffer();
+    if (!buf) return;
+
     CALayer *overlay = objc_getAssociatedObject(self, "vcam_overlay");
     if (!overlay) {
         overlay = [CALayer layer];
@@ -177,97 +150,85 @@ static CVPixelBufferRef _v_getBuffer() {
         overlay.opaque = YES;
         [self addSublayer:overlay];
         objc_setAssociatedObject(self, "vcam_overlay", overlay, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        VCLog(@"Created overlay layer");
     }
-    
+
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
     overlay.frame = self.bounds;
     overlay.hidden = NO;
     overlay.opacity = 1.0;
-    
-    CVPixelBufferRef buffer = _v_getBuffer();
-    if (buffer) {
-        IOSurfaceRef surface = CVPixelBufferGetIOSurface(buffer);
-        if (surface) {
-            overlay.contents = (__bridge id)surface;
-        }
-        CVPixelBufferRelease(buffer);
-    }
-    
+
+    IOSurfaceRef surface = CVPixelBufferGetIOSurface(buf);
+    if (surface) overlay.contents = (__bridge id)surface;
+
     [CATransaction commit];
+    CVPixelBufferRelease(buf);
 }
 
 %end
 
 %hook AVCaptureVideoDataOutput
 
-- (void)setSampleBufferDelegate:(id<AVCaptureVideoDataOutputSampleBufferDelegate>)sampleBufferDelegate queue:(dispatch_queue_t)sampleBufferCallbackQueue {
-    VCLog(@"AVCaptureVideoDataOutput setSampleBufferDelegate");
+- (void)setSampleBufferDelegate:(id)delegate queue:(dispatch_queue_t)q {
     _v_init();
-    
-    if (_enabled && sampleBufferDelegate) {
-        id proxyDelegate = objc_getAssociatedObject(self, "vcam_proxy");
-        if (!proxyDelegate) {
-            proxyDelegate = [[NSObject alloc] init];
-            
-            IMP imp = imp_implementationWithBlock(^(id _self, AVCaptureOutput *output, CMSampleBufferRef sampleBuffer, AVCaptureConnection *connection) {
-                CVPixelBufferRef virtualBuffer = _v_getBuffer();
-                if (virtualBuffer) {
-                    CMSampleBufferRef newSampleBuffer = NULL;
-                    CMSampleTimingInfo timing = {
-                        .duration = CMTimeMake(1, 30),
-                        .presentationTimeStamp = CMTimeMakeWithSeconds(CACurrentMediaTime(), 1000000000),
-                        .decodeTimeStamp = kCMTimeInvalid
-                    };
-                    
-                    CMVideoFormatDescriptionRef formatDesc = NULL;
-                    CMVideoFormatDescriptionCreateForImageBuffer(kCFAllocatorDefault, virtualBuffer, &formatDesc);
-                    
-                    if (formatDesc) {
-                        CMSampleBufferCreateReadyWithImageBuffer(kCFAllocatorDefault,
-                                                                virtualBuffer,
-                                                                formatDesc,
-                                                                &timing,
-                                                                &newSampleBuffer);
-                        CFRelease(formatDesc);
-                    }
-                    
-                    if (newSampleBuffer) {
-                        [sampleBufferDelegate captureOutput:output didOutputSampleBuffer:newSampleBuffer fromConnection:connection];
-                        CFRelease(newSampleBuffer);
-                    } else {
-                        [sampleBufferDelegate captureOutput:output didOutputSampleBuffer:sampleBuffer fromConnection:connection];
-                    }
-                    
-                    CVPixelBufferRelease(virtualBuffer);
-                } else {
-                    [sampleBufferDelegate captureOutput:output didOutputSampleBuffer:sampleBuffer fromConnection:connection];
+
+    if (!_enabled || !delegate) { %orig; return; }
+
+    static Class proxyClass = nil;
+    static dispatch_once_t onceP;
+    dispatch_once(&onceP, ^{
+        proxyClass = objc_allocateClassPair([NSObject class], "VCamProxyDelegate", 0);
+        IMP imp = imp_implementationWithBlock(^(id self_,
+                                                AVCaptureOutput *output,
+                                                CMSampleBufferRef sb,
+                                                AVCaptureConnection *conn) {
+            id orig = objc_getAssociatedObject(self_, "vcam_real");
+            CVPixelBufferRef vb = _v_getBuffer();
+            if (vb && orig) {
+                CMSampleBufferRef nsb = NULL;
+                CMSampleTimingInfo timing = {
+                    .duration = CMTimeMake(1,30),
+                    .presentationTimeStamp = CMTimeMakeWithSeconds(CACurrentMediaTime(),1000000000),
+                    .decodeTimeStamp = kCMTimeInvalid
+                };
+                CMVideoFormatDescriptionRef fd = NULL;
+                CMVideoFormatDescriptionCreateForImageBuffer(kCFAllocatorDefault, vb, &fd);
+                if (fd) {
+                    CMSampleBufferCreateReadyWithImageBuffer(kCFAllocatorDefault, vb, fd, &timing, &nsb);
+                    CFRelease(fd);
                 }
-            });
-            
-            class_addMethod([proxyDelegate class], 
-                          @selector(captureOutput:didOutputSampleBuffer:fromConnection:), 
-                          imp, 
-                          "v@:@@@");
-            
-            objc_setAssociatedObject(self, "vcam_proxy", proxyDelegate, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            objc_setAssociatedObject(self, "vcam_original_delegate", sampleBufferDelegate, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        }
-        
-        %orig(proxyDelegate, sampleBufferCallbackQueue);
-        VCLog(@"Installed proxy delegate for video output");
-    } else {
-        %orig;
+                if (nsb) {
+                    [orig captureOutput:output didOutputSampleBuffer:nsb fromConnection:conn];
+                    CFRelease(nsb);
+                } else {
+                    [orig captureOutput:output didOutputSampleBuffer:sb fromConnection:conn];
+                }
+                CVPixelBufferRelease(vb);
+            } else if (orig) {
+                [orig captureOutput:output didOutputSampleBuffer:sb fromConnection:conn];
+            }
+        });
+        class_addMethod(proxyClass,
+                        @selector(captureOutput:didOutputSampleBuffer:fromConnection:),
+                        imp, "v@:@@@");
+        objc_registerClassPair(proxyClass);
+    });
+
+    id proxy = objc_getAssociatedObject(self, "vcam_proxy");
+    if (!proxy) {
+        proxy = [[proxyClass alloc] init];
+        objc_setAssociatedObject(self, "vcam_proxy", proxy, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
+    objc_setAssociatedObject(proxy, "vcam_real", delegate, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+
+    %orig(proxy, q);
 }
 
 %end
 
 %hook AVCapturePhotoOutput
 
-- (void)capturePhotoWithSettings:(AVCapturePhotoSettings *)settings delegate:(id<AVCapturePhotoCaptureDelegate>)delegate {
-    VCLog(@"Capturing photo with settings");
+- (void)capturePhotoWithSettings:(AVCapturePhotoSettings *)s delegate:(id)d {
     _v_init();
     %orig;
 }
@@ -278,41 +239,27 @@ static CVPixelBufferRef _v_getBuffer() {
 
 - (void)layoutSubviews {
     %orig;
-    if (_enabled) {
-        VCLog(@"CAMPreviewView layoutSubviews");
-        _v_init();
-    }
+    if (_enabled) _v_init();
 }
 
 %end
 
 %ctor {
     @autoreleasepool {
-        NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
-        VCLog(@"Loading in bundle: %@", bundleID);
-        
-        if (bundleID && ![bundleID hasPrefix:@"com.apple.springboard"]) {
-            NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:@"/var/mobile/Library/Preferences/com.murkaska.virtualcampro.plist"];
-            
-            if (prefs) {
-                _enabled = [prefs[@"enabled"] boolValue];
-                NSString *customURL = prefs[@"rtspURL"];
-                if (customURL && customURL.length > 0) {
-                    _url = customURL;
-                }
-                VCLog(@"Loaded preferences - enabled: %d, URL: %@", _enabled, _url);
-            }
-            
-            if (_enabled) {
-                VCLog(@"VirtualCamPro enabled - initializing hooks");
-                %init;
-                
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                    _v_init();
-                });
-            } else {
-                VCLog(@"VirtualCamPro disabled in preferences");
-            }
+        NSString *bid = [[NSBundle mainBundle] bundleIdentifier];
+        if (!bid || [bid hasPrefix:@"com.apple.springboard"]) return;
+
+        NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:
+            @"/var/mobile/Library/Preferences/com.murkaska.virtualcampro.plist"];
+        if (prefs) {
+            if (prefs[@"enabled"]) _enabled = [prefs[@"enabled"] boolValue];
+            NSString *u = prefs[@"rtspURL"];
+            if (u.length > 0) _url = u;
+        }
+
+        if (_enabled) {
+            VCLog(@"Loaded in %@", bid);
+            %init;
         }
     }
 }
