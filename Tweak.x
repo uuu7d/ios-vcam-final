@@ -4,7 +4,6 @@
 #import <objc/runtime.h>
 #import <CoreVideo/CoreVideo.h>
 
-// --- COMPILER FIX ---
 @interface AVPlayerItemVideoOutput (VCamFix)
 - (BOOL)hasNewPixelBufferForTime:(CMTime)t;
 - (CVPixelBufferRef)copyPixelBufferForTime:(CMTime)t itemTimeForDisplay:(CMTime *)d;
@@ -24,7 +23,6 @@ static void _v_ensure_init() {
         _v_player = [[AVPlayer alloc] initWithURL:[NSURL URLWithString:_v_url]];
         _v_output = [[AVPlayerItemVideoOutput alloc] initWithPixelBufferAttributes:@{(id)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA)}];
         [_v_player.currentItem addOutput:_v_output];
-        _v_player.actionAtItemEnd = AVPlayerActionAtItemEndNone;
         [_v_player play];
         _v_queue = dispatch_queue_create("com.murkaska.vcam.sync", DISPATCH_QUEUE_SERIAL);
     });
@@ -34,8 +32,8 @@ static void _v_sync() {
     if (!_v_player || !_v_output || !_v_queue) return;
     dispatch_async(_v_queue, ^{
         CMTime t = [_v_player.currentItem currentTime];
-        if ([(AVPlayerItemVideoOutput *)_v_output hasNewPixelBufferForTime:t]) {
-            CVPixelBufferRef pb = [(AVPlayerItemVideoOutput *)_v_output copyPixelBufferForTime:t itemTimeForDisplay:NULL];
+        if ([_v_output hasNewPixelBufferForTime:t]) {
+            CVPixelBufferRef pb = [_v_output copyPixelBufferForTime:t itemTimeForDisplay:NULL];
             if (pb) {
                 if (_v_buffer) CVPixelBufferRelease(_v_buffer);
                 _v_buffer = pb;
@@ -44,60 +42,38 @@ static void _v_sync() {
     });
 }
 
-// --- STABLE PHOTO HOOKS (No Swizzling) ---
-%hook AVCapturePhoto
-- (CVPixelBufferRef)pixelBuffer {
-    _v_sync();
-    if (_v_enabled && _v_buffer) return (CVPixelBufferRef)CFRetain(_v_buffer);
-    return %orig;
-}
-- (CVPixelBufferRef)previewPixelBuffer {
-    _v_sync();
-    if (_v_enabled && _v_buffer) return (CVPixelBufferRef)CFRetain(_v_buffer);
-    return %orig;
-}
-- (NSData *)fileDataRepresentation {
-    if (_v_enabled && _v_buffer) {
-        _v_sync();
-        CIImage *ci = [CIImage imageWithCVPixelBuffer:_v_buffer];
-        CIContext *ctx = [CIContext contextWithOptions:nil];
-        CGImageRef cg = [ctx createCGImage:ci fromRect:ci.extent];
-        NSData *d = UIImageJPEGRepresentation([UIImage imageWithCGImage:cg], 0.85);
-        CGImageRelease(cg);
-        return d;
-    }
-    return %orig;
-}
-%end
-
-// --- DELEGATE PROXY (SAFE) ---
-@interface VCamDelegateProxy : NSObject <AVCaptureVideoDataOutputSampleBufferDelegate>
+// --- DYNAMIC PROXY FOR STABILITY ---
+@interface VCamDynamicProxy : NSProxy <AVCaptureVideoDataOutputSampleBufferDelegate, AVCapturePhotoCaptureDelegate>
 @property (nonatomic, strong) id target;
 @end
-@implementation VCamDelegateProxy
-- (void)captureOutput:(id)o didOutputSampleBuffer:(CMSampleBufferRef)s fromConnection:(id)c {
+
+@implementation VCamDynamicProxy
+- (instancetype)initWithTarget:(id)target { self.target = target; return self; }
+- (NSMethodSignature *)methodSignatureForSelector:(SEL)sel { return [self.target methodSignatureForSelector:sel]; }
+- (void)forwardInvocation:(NSInvocation *)inv { [inv invokeWithTarget:self.target]; }
+- (BOOL)respondsToSelector:(SEL)sel { return [self.target respondsToSelector:sel]; }
+
+- (void)captureOutput:(AVCaptureOutput *)o didOutputSampleBuffer:(CMSampleBufferRef)s fromConnection:(AVCaptureConnection *)c {
     _v_sync();
     if (_v_enabled && _v_buffer) {
         CMSampleBufferRef nb = NULL; CMVideoFormatDescriptionRef fd = NULL;
         CMVideoFormatDescriptionCreateForImageBuffer(NULL, _v_buffer, &fd);
         CMSampleTimingInfo ti; CMSampleBufferGetSampleTimingInfo(s, 0, &ti);
-        if (CMSampleBufferCreateForImageBuffer(kCFAllocatorDefault, _v_buffer, YES, NULL, NULL, fd, &ti, &nb) == 0 && nb) {
+        if (CMSampleBufferCreateForImageBuffer(kCFAllocatorDefault, _v_buffer, YES, NULL, NULL, fd, &ti, &nb) == noErr && nb) {
             if ([self.target respondsToSelector:_cmd]) [self.target captureOutput:o didOutputSampleBuffer:nb fromConnection:c];
             CFRelease(nb); if (fd) CFRelease(fd); return;
         }
     }
     if ([self.target respondsToSelector:_cmd]) [self.target captureOutput:o didOutputSampleBuffer:s fromConnection:c];
 }
-- (BOOL)respondsToSelector:(SEL)s { return [super respondsToSelector:s] || [self.target respondsToSelector:s]; }
-- (id)forwardingTargetForSelector:(SEL)s { return self.target; }
 @end
 
 // --- HOOKS ---
 %hook AVCaptureVideoDataOutput
 - (void)setSampleBufferDelegate:(id)d queue:(id)q {
-    if (_v_enabled && d && ![d isKindOfClass:[VCamDelegateProxy class]]) {
+    if (_v_enabled && d && ![d isKindOfClass:[VCamDynamicProxy class]]) {
         _v_ensure_init();
-        VCamDelegateProxy *p = [[VCamDelegateProxy alloc] init]; p.target = d;
+        VCamDynamicProxy *p = [[VCamDynamicProxy alloc] initWithTarget:d];
         objc_setAssociatedObject(self, _cmd, p, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         %orig(p, q);
     } else %orig;
@@ -110,21 +86,12 @@ static void _v_sync() {
     if (!_v_enabled) return;
     _v_ensure_init();
     
-    // Скрываем контент оригинального слоя, чтобы не было видно линзу
-    self.contents = nil;
-    
-    AVPlayerLayer *l = objc_getAssociatedObject(self, "_v_l");
-    if (!l && _v_player) {
-        l = [AVPlayerLayer playerLayerWithPlayer:_v_player];
-        l.videoGravity = AVLayerVideoGravityResizeAspectFill;
-        l.zPosition = 9999;
-        [self addSublayer:l];
-        objc_setAssociatedObject(self, "_v_l", l, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        [NSTimer scheduledTimerWithTimeInterval:0.033 repeats:YES block:^(NSTimer *t) { _v_sync(); }];
-    }
-    if (l) {
-        [CATransaction begin]; [CATransaction setDisableActions:YES];
-        l.frame = self.bounds;
+    // Обновляем превью через подмену контента, а не слоев
+    _v_sync();
+    if (_v_buffer) {
+        [CATransaction begin];
+        [CATransaction setDisableActions:YES];
+        self.contents = (__bridge id)CVPixelBufferGetIOSurface(_v_buffer);
         [CATransaction commit];
     }
 }
