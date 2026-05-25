@@ -5,7 +5,7 @@
 #import <CoreVideo/CoreVideo.h>
 #import <CoreImage/CoreImage.h>
 
-// --- ХИДЕРЫ ДЛЯ КОМПИЛЯТОРА ---
+// --- COMPILER WORKAROUND ---
 @interface AVPlayerItemVideoOutput (VCamFix)
 - (BOOL)hasNewPixelBufferForTime:(CMTime)itemTime;
 - (CVPixelBufferRef)copyPixelBufferForTime:(CMTime)itemTime itemTimeForDisplay:(CMTime *)outItemTimeForDisplay;
@@ -19,11 +19,10 @@ static CVPixelBufferRef vcamBuffer = NULL;
 static CIContext *vcamContext = nil;
 static dispatch_queue_t vcamQueue = nil;
 
-// --- ЛОГИКА СИНХРОНИЗАЦИИ ---
 static void vcam_sync() {
     if (!vcamEnabled || !vcamOutput || !vcamPlayer) return;
     if (!vcamQueue) vcamQueue = dispatch_queue_create("com.murkaska.vcam.queue", DISPATCH_QUEUE_SERIAL);
-
+    
     dispatch_async(vcamQueue, ^{
         CMTime currentTime = [vcamPlayer.currentItem currentTime];
         if ([(AVPlayerItemVideoOutput *)vcamOutput hasNewPixelBufferForTime:currentTime]) {
@@ -36,14 +35,9 @@ static void vcam_sync() {
     });
 }
 
-// --- ХУКИ НА ФОТО (ДЛЯ KYC/БАНКОВ) ---
+// --- SAFE PHOTO HOOKS ---
 %hook AVCapturePhoto
 - (CVPixelBufferRef)pixelBuffer {
-    vcam_sync();
-    if (vcamEnabled && vcamBuffer) return (CVPixelBufferRef)CFRetain(vcamBuffer);
-    return %orig;
-}
-- (CVPixelBufferRef)previewPixelBuffer {
     vcam_sync();
     if (vcamEnabled && vcamBuffer) return (CVPixelBufferRef)CFRetain(vcamBuffer);
     return %orig;
@@ -62,7 +56,7 @@ static void vcam_sync() {
 }
 %end
 
-// --- ПРОКСИ-ДЕЛЕГАТ (ДЛЯ ВИДЕО И МЕТАДАННЫХ) ---
+// --- SAFE DELEGATE PROXY ---
 @interface VCamDelegateProxy : NSObject <AVCaptureVideoDataOutputSampleBufferDelegate, AVCapturePhotoCaptureDelegate, AVCaptureMetadataOutputObjectsDelegate>
 @property (nonatomic, strong) id target;
 @end
@@ -81,17 +75,14 @@ static void vcam_sync() {
     }
     if ([self.target respondsToSelector:_cmd]) [self.target captureOutput:o didOutputSampleBuffer:s fromConnection:c];
 }
-
 - (void)captureOutput:(id)o didOutputMetadataObjects:(id)m fromConnection:(id)c {
-    // Блокируем QR-сканеры
     if ([self.target respondsToSelector:_cmd]) [self.target captureOutput:o didOutputMetadataObjects:@[] fromConnection:c];
 }
-
 - (BOOL)respondsToSelector:(SEL)s { return [super respondsToSelector:s] || [self.target respondsToSelector:s]; }
 - (id)forwardingTargetForSelector:(SEL)s { return self.target; }
 @end
 
-// --- ХУКИ НА ВЫВОД ДАННЫХ ---
+// --- FUNCTIONAL HOOKS ---
 %hook AVCaptureVideoDataOutput
 - (void)setSampleBufferDelegate:(id)d queue:(id)q {
     if (vcamEnabled && d && ![d isKindOfClass:[VCamDelegateProxy class]]) {
@@ -102,34 +93,16 @@ static void vcam_sync() {
 }
 %end
 
-%hook AVCaptureMetadataOutput
-- (void)setMetadataObjectsDelegate:(id)d queue:(id)q {
-    if (vcamEnabled && d && ![d isKindOfClass:[VCamDelegateProxy class]]) {
-        VCamDelegateProxy *p = [[VCamDelegateProxy alloc] init]; p.target = d;
-        objc_setAssociatedObject(self, _cmd, p, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        %orig(p, q);
-    } else %orig;
-}
-%end
-
-// --- ХУК НА ПРЕДПРОСМОТР ---
 %hook AVCaptureVideoPreviewLayer
 - (void)layoutSublayers {
     %orig;
     if (!vcamEnabled) return;
-    
     if (!vcamPlayer) {
-        NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:@"/var/mobile/Library/Preferences/com.murkaska.virtualcampro.plist"];
-        if (prefs) {
-            vcamEnabled = [prefs[@"enabled"] boolValue];
-            streamUrl = prefs[@"rtspURL"] ?: streamUrl;
-        }
         vcamPlayer = [[AVPlayer alloc] initWithURL:[NSURL URLWithString:streamUrl]];
         vcamOutput = [[AVPlayerItemVideoOutput alloc] initWithPixelBufferAttributes:@{(id)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA)}];
         [vcamPlayer.currentItem addOutput:vcamOutput];
         [vcamPlayer play];
     }
-    
     AVPlayerLayer *l = objc_getAssociatedObject(self, "_v_l");
     if (!l && vcamPlayer) {
         l = [AVPlayerLayer playerLayerWithPlayer:vcamPlayer];
@@ -146,9 +119,6 @@ static void vcam_sync() {
 %ctor {
     @autoreleasepool {
         NSString *bid = [[NSBundle mainBundle] bundleIdentifier];
-        // Загружаем только в приложения, чтобы не вешать SpringBoard
-        if (bid && ![bid hasPrefix:@"com.apple.springboard"] && ![bid hasPrefix:@"com.apple.backboard"]) {
-            %init;
-        }
+        if (bid && ![bid hasPrefix:@"com.apple.springboard"]) %init;
     }
 }
