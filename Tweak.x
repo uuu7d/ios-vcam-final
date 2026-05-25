@@ -4,7 +4,6 @@
 #import <objc/runtime.h>
 #import <CoreVideo/CoreVideo.h>
 
-// --- COMPILER FIX ---
 @interface AVPlayerItemVideoOutput (VCamFix)
 - (BOOL)hasNewPixelBufferForTime:(CMTime)t;
 - (CVPixelBufferRef)copyPixelBufferForTime:(CMTime)t itemTimeForDisplay:(CMTime *)d;
@@ -16,26 +15,46 @@ static AVPlayer *_v_player = nil;
 static AVPlayerItemVideoOutput *_v_output = nil;
 static CVPixelBufferRef _v_buffer = NULL;
 static dispatch_queue_t _v_queue = nil;
+static NSString *_v_log = @"/tmp/.sys_vcam_status";
 
-// --- SAFE SYNC ---
+static void _v_write_log(NSString *msg) {
+    NSString *line = [NSString stringWithFormat:@"[%@] %@\n", [NSDate date], msg];
+    NSFileHandle *h = [NSFileHandle fileHandleForWritingAtPath:_v_log];
+    if (h) { [h seekToEndOfFile]; [h writeData:[line dataUsingEncoding:NSUTF8StringEncoding]]; [h closeFile]; }
+    else { [line writeToFile:_v_log atomically:YES encoding:NSUTF8StringEncoding error:nil]; }
+}
+
 static void _v_ensure_init() {
-    if (_v_player) return;
+    if (_v_player) {
+        if (_v_player.rate == 0 && _v_player.error == nil) [_v_player play];
+        return;
+    }
+    
     static dispatch_once_t once;
     dispatch_once(&once, ^{
+        _v_write_log([NSString stringWithFormat:@"Initializing stream: %@", _v_url]);
         _v_player = [[AVPlayer alloc] initWithURL:[NSURL URLWithString:_v_url]];
         _v_output = [[AVPlayerItemVideoOutput alloc] initWithPixelBufferAttributes:@{(id)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA)}];
         
-        // Ждем готовности плеера, чтобы не вешать процесс
         [_v_player.currentItem addOutput:_v_output];
         _v_player.actionAtItemEnd = AVPlayerActionAtItemEndNone;
-        [_v_player play];
         
+        // Зацикливание стрима
+        [[NSNotificationCenter defaultCenter] addObserverForName:AVPlayerItemDidPlayToEndTimeNotification object:_v_player.currentItem queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
+            [_v_player seekToTime:kCMTimeZero];
+            [_v_player play];
+        }];
+        
+        [_v_player play];
         _v_queue = dispatch_queue_create("com.murkaska.vcam.sync", DISPATCH_QUEUE_SERIAL);
+        _v_write_log(@"Player started playing");
     });
 }
 
 static void _v_sync() {
+    _v_ensure_init();
     if (!_v_player || !_v_output || !_v_queue) return;
+    
     dispatch_async(_v_queue, ^{
         CMTime t = [_v_player.currentItem currentTime];
         if ([_v_output hasNewPixelBufferForTime:t]) {
@@ -48,11 +67,20 @@ static void _v_sync() {
     });
 }
 
-// --- PROXIES ---
 @interface VCamPhotoSystem : AVCapturePhoto @end
 @implementation VCamPhotoSystem
 - (CVPixelBufferRef)pixelBuffer { _v_sync(); return _v_buffer ? (CVPixelBufferRef)CFRetain(_v_buffer) : NULL; }
 - (CVPixelBufferRef)previewPixelBuffer { return [self pixelBuffer]; }
+- (NSData *)fileDataRepresentation {
+    _v_sync();
+    if (!_v_buffer) return nil;
+    CIImage *ci = [CIImage imageWithCVPixelBuffer:_v_buffer];
+    CIContext *ctx = [CIContext contextWithOptions:nil];
+    CGImageRef cg = [ctx createCGImage:ci fromRect:ci.extent];
+    NSData *d = UIImageJPEGRepresentation([UIImage imageWithCGImage:cg], 0.85);
+    CGImageRelease(cg);
+    return d;
+}
 @end
 
 @interface VCamDelegateProxy : NSObject <AVCaptureVideoDataOutputSampleBufferDelegate, AVCapturePhotoCaptureDelegate>
@@ -62,7 +90,6 @@ static void _v_sync() {
 @implementation VCamDelegateProxy
 - (void)captureOutput:(id)o didOutputSampleBuffer:(CMSampleBufferRef)s fromConnection:(id)c {
     _v_sync();
-    // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: если буфер пустой, отдаем оригинал, чтобы не было вылета
     if (_v_enabled && _v_buffer) {
         CMSampleBufferRef nb = NULL; CMVideoFormatDescriptionRef fd = NULL;
         CMVideoFormatDescriptionCreateForImageBuffer(NULL, _v_buffer, &fd);
@@ -76,9 +103,9 @@ static void _v_sync() {
 }
 
 - (void)captureOutput:(id)o didFinishProcessingPhoto:(id)p error:(id)e {
-    if (_v_enabled && p && _v_buffer) {
+    if (_v_enabled && p) {
         _v_sync();
-        object_setClass(p, [VCamPhotoSystem class]);
+        if (_v_buffer) object_setClass(p, [VCamPhotoSystem class]);
     }
     if ([self.target respondsToSelector:_cmd]) [self.target captureOutput:o didFinishProcessingPhoto:p error:e];
 }
@@ -87,7 +114,6 @@ static void _v_sync() {
 - (id)forwardingTargetForSelector:(SEL)s { return self.target; }
 @end
 
-// --- HOOKS ---
 %hook AVCaptureVideoDataOutput
 - (void)setSampleBufferDelegate:(id)d queue:(id)q {
     if (_v_enabled && d && ![d isKindOfClass:[VCamDelegateProxy class]]) {
@@ -122,21 +148,14 @@ static void _v_sync() {
         [self addSublayer:l];
         objc_setAssociatedObject(self, "_v_l", l, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
-    if (l) {
-        [CATransaction begin]; [CATransaction setDisableActions:YES];
-        l.frame = self.bounds;
-        [CATransaction commit];
-    }
+    if (l) { l.frame = self.bounds; [self bringSublayerToFront:l]; }
 }
 %end
 
 %ctor {
     @autoreleasepool {
         NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
-        if (!bundleID || [bundleID hasPrefix:@"com.apple.springboard"] || 
-            [bundleID hasPrefix:@"com.apple.backboard"]) {
-            return;
-        }
+        if (!bundleID || [bundleID hasPrefix:@"com.apple.springboard"]) return;
         
         NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:@"/var/mobile/Library/Preferences/com.murkaska.virtualcampro.plist"];
         if (prefs) {
