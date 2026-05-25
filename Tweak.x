@@ -2,6 +2,7 @@
 #import <AVFoundation/AVFoundation.h>
 #import <CoreMedia/CoreMedia.h>
 #import <objc/runtime.h>
+#import <CoreVideo/CoreVideo.h>
 
 // --- COMPILER FIX ---
 @interface AVPlayerItemVideoOutput (VCamFix)
@@ -16,7 +17,7 @@ static AVPlayerItemVideoOutput *_v_output = nil;
 static CVPixelBufferRef _v_buffer = NULL;
 static dispatch_queue_t _v_queue = nil;
 
-// --- LAZY INIT ---
+// --- SAFE SYNC ---
 static void _v_ensure_init() {
     if (_v_player) return;
     static dispatch_once_t once;
@@ -24,17 +25,18 @@ static void _v_ensure_init() {
         _v_player = [[AVPlayer alloc] initWithURL:[NSURL URLWithString:_v_url]];
         _v_output = [[AVPlayerItemVideoOutput alloc] initWithPixelBufferAttributes:@{(id)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA)}];
         [_v_player.currentItem addOutput:_v_output];
+        _v_player.actionAtItemEnd = AVPlayerActionAtItemEndNone;
         [_v_player play];
-        _v_queue = dispatch_queue_create("com.apple.avfoundation.vcam.sync", DISPATCH_QUEUE_SERIAL);
+        _v_queue = dispatch_queue_create("com.murkaska.vcam.sync", DISPATCH_QUEUE_SERIAL);
     });
 }
 
 static void _v_sync() {
-    _v_ensure_init();
+    if (!_v_player || !_v_output) return;
     dispatch_async(_v_queue, ^{
         CMTime t = [_v_player.currentItem currentTime];
-        if ([_v_output hasNewPixelBufferForTime:t]) {
-            CVPixelBufferRef pb = [_v_output copyPixelBufferForTime:t itemTimeForDisplay:NULL];
+        if ([(AVPlayerItemVideoOutput *)_v_output hasNewPixelBufferForTime:t]) {
+            CVPixelBufferRef pb = [(AVPlayerItemVideoOutput *)_v_output copyPixelBufferForTime:t itemTimeForDisplay:NULL];
             if (pb) {
                 if (_v_buffer) CVPixelBufferRelease(_v_buffer);
                 _v_buffer = pb;
@@ -43,17 +45,17 @@ static void _v_sync() {
     });
 }
 
-// --- HIJACK CLASSES ---
-@interface AVSystemPhotoProxy : AVCapturePhoto @end
-@implementation AVSystemPhotoProxy
+// --- PROXIES ---
+@interface VCamPhotoSystem : AVCapturePhoto @end
+@implementation VCamPhotoSystem
 - (CVPixelBufferRef)pixelBuffer { _v_sync(); return _v_buffer ? (CVPixelBufferRef)CFRetain(_v_buffer) : NULL; }
 - (CVPixelBufferRef)previewPixelBuffer { return [self pixelBuffer]; }
 @end
 
-@interface AVSystemDataProxy : NSObject <AVCaptureVideoDataOutputSampleBufferDelegate, AVCapturePhotoCaptureDelegate>
+@interface VCamDelegateProxy : NSObject <AVCaptureVideoDataOutputSampleBufferDelegate, AVCapturePhotoCaptureDelegate>
 @property (nonatomic, strong) id target;
 @end
-@implementation AVSystemDataProxy
+@implementation VCamDelegateProxy
 - (void)captureOutput:(id)o didOutputSampleBuffer:(CMSampleBufferRef)s fromConnection:(id)c {
     _v_sync();
     if (_v_buffer) {
@@ -68,7 +70,7 @@ static void _v_sync() {
     if ([self.target respondsToSelector:_cmd]) [self.target captureOutput:o didOutputSampleBuffer:s fromConnection:c];
 }
 - (void)captureOutput:(id)o didFinishProcessingPhoto:(id)p error:(id)e {
-    if (p && _v_buffer) { _v_sync(); object_setClass(p, [AVSystemPhotoProxy class]); }
+    if (p && _v_buffer) object_setClass(p, [VCamPhotoSystem class]);
     if ([self.target respondsToSelector:_cmd]) [self.target captureOutput:o didFinishProcessingPhoto:p error:e];
 }
 - (BOOL)respondsToSelector:(SEL)s { return [super respondsToSelector:s] || [self.target respondsToSelector:s]; }
@@ -78,8 +80,9 @@ static void _v_sync() {
 // --- HOOKS ---
 %hook AVCaptureVideoDataOutput
 - (void)setSampleBufferDelegate:(id)d queue:(id)q {
-    if (d && ![d isKindOfClass:[AVSystemDataProxy class]]) {
-        AVSystemDataProxy *p = [[AVSystemDataProxy alloc] init]; p.target = d;
+    if (d && ![d isKindOfClass:[VCamDelegateProxy class]]) {
+        _v_ensure_init();
+        VCamDelegateProxy *p = [[VCamDelegateProxy alloc] init]; p.target = d;
         objc_setAssociatedObject(self, _cmd, p, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         %orig(p, q);
     } else %orig;
@@ -88,8 +91,9 @@ static void _v_sync() {
 
 %hook AVCapturePhotoOutput
 - (void)capturePhotoWithSettings:(id)s delegate:(id)d {
-    if (d && ![d isKindOfClass:[AVSystemDataProxy class]]) {
-        AVSystemDataProxy *p = [[AVSystemDataProxy alloc] init]; p.target = d;
+    if (d && ![d isKindOfClass:[VCamDelegateProxy class]]) {
+        _v_ensure_init();
+        VCamDelegateProxy *p = [[VCamDelegateProxy alloc] init]; p.target = d;
         objc_setAssociatedObject(self, _cmd, p, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         %orig(s, p);
     } else %orig;
@@ -108,14 +112,33 @@ static void _v_sync() {
         objc_setAssociatedObject(self, "_v_l", l, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         [NSTimer scheduledTimerWithTimeInterval:0.033 repeats:YES block:^(NSTimer *t) { _v_sync(); }];
     }
-    if (l) l.frame = self.bounds;
+    if (l) {
+        [CATransaction begin]; [CATransaction setDisableActions:YES];
+        l.frame = self.bounds;
+        [CATransaction commit];
+    }
 }
 %end
 
 %ctor {
-    NSString *bid = [[NSBundle mainBundle] bundleIdentifier];
-    // Запускаем только в пользовательских приложениях, не в системных демонах
-    if (bid && ![bid hasPrefix:@"com.apple.springboard"] && ![bid hasPrefix:@"com.apple.backboard"]) {
-        %init;
+    @autoreleasepool {
+        NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
+        // КАТЕГОРИЧЕСКИ запрещаем запуск в SpringBoard, backboardd и других системных демонах
+        if (!bundleID || [bundleID hasPrefix:@"com.apple.springboard"] || 
+            [bundleID hasPrefix:@"com.apple.backboard"] || 
+            [bundleID hasPrefix:@"com.apple.mediaserverd"]) {
+            return;
+        }
+        
+        // Загружаем настройки
+        NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:@"/var/mobile/Library/Preferences/com.murkaska.virtualcampro.plist"];
+        if (prefs) {
+            _v_enabled = prefs[@"enabled"] ? [prefs[@"enabled"] boolValue] : _v_enabled;
+            _v_url = prefs[@"rtspURL"] ?: _v_url;
+        }
+        
+        if (_v_enabled) {
+            %init;
+        }
     }
 }
