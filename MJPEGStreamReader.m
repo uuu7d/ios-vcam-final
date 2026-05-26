@@ -164,8 +164,8 @@
         [[NSNotificationCenter defaultCenter] removeObserver:self];
         [self.displayLink invalidate];
         self.displayLink = nil;
-        [self.hlsPlayer paus;
-        self.dihlsPlayer = nil;
+        [self.hlsPlayer pause];
+        self.hlsPlayer = nil;
         self.hlsPlayerItem = nil;
         self.videoOutput = nil;
     });
@@ -176,8 +176,10 @@
 // ========================================
 
 - (void)startMJPEGStream {
-    NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration
-      config.timeoutIntervalForRequest = 30.0      config.timeoutIntervalForResource = 300.0      config.HTTPMaximumConnectionsPerHost = 1;
+    NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
+    config.timeoutIntervalForRequest = 30.0;
+    config.timeoutIntervalForResource = 300.0;
+    config.HTTPMaximumConnectionsPerHost = 1;
 
     self.session = [NSURLSession sessionWithConfiguration:config delegate:self delegateQueue:nil];
     self.imageData = [NSMutableData data];
