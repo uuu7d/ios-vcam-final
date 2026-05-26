@@ -5,10 +5,10 @@
 #import <CoreVideo/CoreVideo.h>
 #import <QuartzCore/QuartzCore.h>
 #import <objc/runtime.h>
-#import \"MJPEGStreamReader.h\"
+#import "MJPEGStreamReader.h"
 
 static BOOL _enabled = YES;
-static NSString *_url = @\"http://192.168.1.44:8888/live/stream/index.m3u8\";
+static NSString *_url = @"http://192.168.1.44:8888/live/stream/index.m3u8";
 static MJPEGStreamReader *_reader = nil;
 static CVPixelBufferRef _lastBuffer = NULL;
 static id _v_lock = nil;
@@ -30,7 +30,7 @@ static void _v_init(void) {
             }
         };
         [_reader startStreaming];
-        NSLog(@\"[VCam] Stream initialized and started\");
+        NSLog(@"[VCam] Stream initialized and started");
     });
 }
 
@@ -119,7 +119,7 @@ static CMSampleBufferRef _v_makeReplacementSampleBuffer(CMSampleBufferRef origin
                     origIMP = method_setImplementation(m, newIMP);
                 }
                 [swizzledClassNames addObject:clsName];
-                NSLog(@\"[VCam] Swizzled delegate class: %@\", clsName);
+                NSLog(@"[VCam] Swizzled delegate class: %@", clsName);
             }
         }
     }
@@ -137,7 +137,7 @@ static CMSampleBufferRef _v_makeReplacementSampleBuffer(CMSampleBufferRef origin
 - (CVPixelBufferRef)pixelBuffer {
     @synchronized(_v_lock) {
         if (_enabled && _lastBuffer) {
-            NSLog(@\"[VCam] Returning virtual buffer for photo\");
+            NSLog(@"[VCam] Returning virtual buffer for photo");
             return (CVPixelBufferRef)CFRetain(_lastBuffer);
         }
     }
@@ -153,7 +153,7 @@ static CMSampleBufferRef _v_makeReplacementSampleBuffer(CMSampleBufferRef origin
             if (!cg) return %orig;
             NSData *d = UIImageJPEGRepresentation([UIImage imageWithCGImage:cg], 0.9);
             CGImageRelease(cg);
-            NSLog(@\"[VCam] Returning virtual photo data\");
+            NSLog(@"[VCam] Returning virtual photo data");
             return d;
         }
     }
@@ -173,7 +173,7 @@ static CMSampleBufferRef _v_makeReplacementSampleBuffer(CMSampleBufferRef origin
 
     _v_init();
 
-    CALayer *overlay = objc_getAssociatedObject(self, \"_v_overlay\");
+    CALayer *overlay = objc_getAssociatedObject(self, "_v_overlay");
     if (!overlay) {
         overlay = [CALayer layer];
         overlay.contentsGravity = kCAGravityResizeAspectFill;
@@ -181,7 +181,7 @@ static CMSampleBufferRef _v_makeReplacementSampleBuffer(CMSampleBufferRef origin
         overlay.backgroundColor = [UIColor blackColor].CGColor;
         overlay.opaque = YES;
         [self addSublayer:overlay];
-        objc_setAssociatedObject(self, \"_v_overlay\", overlay, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(self, "_v_overlay", overlay, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
 
     [CATransaction begin];
@@ -219,7 +219,7 @@ static CMSampleBufferRef _v_makeReplacementSampleBuffer(CMSampleBufferRef origin
 + (AVCaptureDevice *)defaultDeviceWithMediaType:(AVMediaType)mediaType {
     if (_enabled && [mediaType isEqualToString:AVMediaTypeVideo]) {
         _v_init();
-        NSLog(@\"[VCam] defaultDeviceWithMediaType:AVMediaTypeVideo\");
+        NSLog(@"[VCam] defaultDeviceWithMediaType:AVMediaTypeVideo");
     }
     return %orig;
 }
@@ -229,7 +229,7 @@ static CMSampleBufferRef _v_makeReplacementSampleBuffer(CMSampleBufferRef origin
                                         position:(AVCaptureDevicePosition)position {
     if (_enabled && [mediaType isEqualToString:AVMediaTypeVideo]) {
         _v_init();
-        NSLog(@\"[VCam] defaultDeviceWithDeviceType for video\");
+        NSLog(@"[VCam] defaultDeviceWithDeviceType for video");
     }
     return %orig;
 }
@@ -244,23 +244,23 @@ static CMSampleBufferRef _v_makeReplacementSampleBuffer(CMSampleBufferRef origin
         NSString *bid = [[NSBundle mainBundle] bundleIdentifier];
 
         // Не активируем в SpringBoard
-        if (bid && ![bid hasPrefix:@\"com.apple.springboard\"]) {
+        if (bid && ![bid hasPrefix:@"com.apple.springboard"]) {
 
             NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:
-                @\"/var/mobile/Library/Preferences/com.murkaska.virtualcampro.plist\"];
+                @"/var/mobile/Library/Preferences/com.murkaska.virtualcampro.plist"];
             if (prefs) {
-                if (prefs[@\"enabled\"]) {
-                    _enabled = [prefs[@\"enabled\"] boolValue];
+                if (prefs[@"enabled"]) {
+                    _enabled = [prefs[@"enabled"] boolValue];
                 }
-                NSString *u = prefs[@\"rtspURL\"];
+                NSString *u = prefs[@"rtspURL"];
                 if (u.length > 0) _url = [u copy];
             }
 
             if (_enabled) {
-                NSLog(@\"[VCam] Tweak enabled for bundle: %@\", bid);
+                NSLog(@"[VCam] Tweak enabled for bundle: %@", bid);
                 %init;
             } else {
-                NSLog(@\"[VCam] Tweak disabled in preferences\");
+                NSLog(@"[VCam] Tweak disabled in preferences");
             }
         }
     }

@@ -25,3 +25,5 @@ typedef void (^MJPEGErrorCallback)(NSError *error);
 - (void)stopStreaming;
 
 @end
+
+NS_ASSUME_NONNULL_END

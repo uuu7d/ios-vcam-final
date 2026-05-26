@@ -1,5 +1,5 @@
 // MJPEGStreamReader.m - VirtualCamPro V272.2 (Fixed)
-#import \"MJPEGStreamReader.h\"
+#import "MJPEGStreamReader.h"
 #import <AVFoundation/AVFoundation.h>
 #import <CoreVideo/CoreVideo.h>
 #import <CoreMedia/CoreMedia.h>
@@ -32,22 +32,22 @@
         _lastFrameTime = 0;
 
         NSString *urlString = url.absoluteString.lowercaseString;
-        _isHLS = [urlString hasSuffix:@\".m3u8\"] || [urlString containsString:@\".m3u8\"];
+        _isHLS = [urlString hasSuffix:@".m3u8"] || [urlString containsString:@".m3u8"];
 
-        NSLog(@\"[VCamStream] Initialized with URL: %@, type: %@\", url, _isHLS ? @\"HLS\" : @\"MJPEG\");
+        NSLog(@"[VCamStream] Initialized with URL: %@, type: %@", url, _isHLS ? @"HLS" : @"MJPEG");
     }
     return self;
 }
 
 - (void)startStreaming {
     if (_isRunning) {
-        NSLog(@\"[VCamStream] Already streaming\");
+        NSLog(@"[VCamStream] Already streaming");
         return;
     }
 
     _isRunning = YES;
     _isConnecting = YES;
-    NSLog(@\"[VCamStream] Starting %@ stream...\", _isHLS ? @\"HLS\" : @\"MJPEG\");
+    NSLog(@"[VCamStream] Starting %@ stream...", _isHLS ? @"HLS" : @"MJPEG");
 
     if (_isHLS) {
         [self startHLSStream];
@@ -57,7 +57,7 @@
 }
 
 - (void)stopStreaming {
-    NSLog(@\"[VCamStream] Stopping stream...\");
+    NSLog(@"[VCamStream] Stopping stream...");
     _isRunning = NO;
     _isConnecting = NO;
 
@@ -93,7 +93,7 @@
         [self.displayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
 
         self.isConnecting = NO;
-        NSLog(@\"[VCamStream] HLS player started\");
+        NSLog(@"[VCamStream] HLS player started");
 
         [[NSNotificationCenter defaultCenter] addObserver:self
                                                  selector:@selector(playerItemDidReachEnd:)
@@ -142,7 +142,7 @@
 }
 
 - (void)playerItemDidReachEnd:(NSNotification *)n {
-    NSLog(@\"[VCamStream] HLS stream ended, restarting...\");
+    NSLog(@"[VCamStream] HLS stream ended, restarting...");
     dispatch_async(dispatch_get_main_queue(), ^{
         [self.hlsPlayer seekToTime:kCMTimeZero];
         [self.hlsPlayer play];
@@ -150,7 +150,7 @@
 }
 
 - (void)playerItemFailed:(NSNotification *)n {
-    NSLog(@\"[VCamStream] HLS item failed, hard-restart in 2s\");
+    NSLog(@"[VCamStream] HLS item failed, hard-restart in 2s");
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
         if (!self.isRunning) return;
@@ -164,8 +164,8 @@
         [[NSNotificationCenter defaultCenter] removeObserver:self];
         [self.displayLink invalidate];
         self.displayLink = nil;
-        [self.hlsPlayer pause];
-        self.hlsPlayer = nil;
+        [self.hlsPlayer paus;
+        self.dihlsPlayer = nil;
         self.hlsPlayerItem = nil;
         self.videoOutput = nil;
     });
@@ -176,21 +176,19 @@
 // ========================================
 
 - (void)startMJPEGStream {
-    NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
-    config.timeoutIntervalForRequest = 30.0;
-    config.timeoutIntervalForResource = 300.0;
-    config.HTTPMaximumConnectionsPerHost = 1;
+    NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration
+      config.timeoutIntervalForRequest = 30.0      config.timeoutIntervalForResource = 300.0      config.HTTPMaximumConnectionsPerHost = 1;
 
     self.session = [NSURLSession sessionWithConfiguration:config delegate:self delegateQueue:nil];
     self.imageData = [NSMutableData data];
 
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:self.streamURL];
-    [request setValue:@\"multipart/x-mixed-replace\" forHTTPHeaderField:@\"Accept\"];
+    [request setValue:@"multipart/x-mixed-replace" forHTTPHeaderField:@"Accept"];
 
     self.task = [self.session dataTaskWithRequest:request];
     [self.task resume];
 
-    NSLog(@\"[VCamStream] MJPEG stream task started\");
+    NSLog(@"[VCamStream] MJPEG stream task started");
 }
 
 - (void)stopMJPEGStream {
@@ -206,7 +204,7 @@
 didReceiveResponse:(NSURLResponse *)response
  completionHandler:(void (^)(NSURLSessionResponseDisposition))ch {
     self.isConnecting = NO;
-    NSLog(@\"[VCamStream] MJPEG connected successfully\");
+    NSLog(@"[VCamStream] MJPEG connected successfully");
     ch(NSURLSessionResponseAllow);
 }
 
@@ -302,7 +300,7 @@ didReceiveResponse:(NSURLResponse *)response
 
     if (self.imageData.length > 10 * 1024 * 1024) {
         [self.imageData setLength:0];
-        NSLog(@\"[VCamStream] Buffer overflow, cleared\");
+        NSLog(@"[VCamStream] Buffer overflow, cleared");
     }
 }
 
@@ -310,7 +308,7 @@ didReceiveResponse:(NSURLResponse *)response
               task:(NSURLSessionTask *)task
 didCompleteWithError:(NSError *)error {
     if (error) {
-        NSLog(@\"[VCamStream] MJPEG stream error: %@\", error.localizedDescription);
+        NSLog(@"[VCamStream] MJPEG stream error: %@", error.localizedDescription);
 
         if (self.errorCallback) {
             dispatch_async(dispatch_get_main_queue(), ^{
@@ -319,7 +317,7 @@ didCompleteWithError:(NSError *)error {
         }
 
         if (self.isRunning) {
-            NSLog(@\"[VCamStream] Reconnecting in 3s...\");
+            NSLog(@"[VCamStream] Reconnecting in 3s...");
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)),
                            dispatch_get_main_queue(), ^{
                 if (self.isRunning) {
@@ -328,7 +326,7 @@ didCompleteWithError:(NSError *)error {
             });
         }
     } else {
-        NSLog(@\"[VCamStream] MJPEG stream ended normally\");
+        NSLog(@"[VCamStream] MJPEG stream ended normally");
     }
 }
 
