@@ -21,30 +21,28 @@
             <string>enabled</string>
             <key>label</key>
             <string>Enabled</string>
+            <key>PostNotification</key>
+            <string>com.murkaska.virtualcampro/prefsChanged</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSGroupCell</string>
+            <key>label</key>
+            <string>Stream URL (HTTP MJPEG or .m3u8 HLS)</string>
         </dict>
         <dict>
             <key>cell</key>
             <string>PSEditTextCell</string>
             <key>default</key>
-            <string>rtsp://192.168.1.44:554/live</string>
+            <string>http://192.168.1.44:8888/live</string>
             <key>defaults</key>
             <string>com.murkaska.virtualcampro</string>
             <key>key</key>
             <string>rtspURL</string>
             <key>label</key>
-            <string>RTSP URL</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSSwitchCell</string>
-            <key>default</key>
-            <true/>
-            <key>defaults</key>
-            <string>com.murkaska.virtualcampro</string>
-            <key>key</key>
-            <string>addNoise</string>
-            <key>label</key>
-            <string>Add Matrix Noise</string>
+            <string>URL</string>
+            <key>PostNotification</key>
+            <string>com.murkaska.virtualcampro/prefsChanged</string>
         </dict>
     </array>
     <key>title</key>
