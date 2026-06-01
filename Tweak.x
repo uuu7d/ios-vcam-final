@@ -258,9 +258,23 @@ static CMSampleBufferRef _v_makeReplacementSampleBuffer(CMSampleBufferRef origin
 %ctor {
     @autoreleasepool {
         NSString *bid = [[NSBundle mainBundle] bundleIdentifier];
+        NSString *exec = [[NSBundle mainBundle] executablePath].lastPathComponent ?: @"";
 
-        // Не активируем в SpringBoard
-        if (!bid || [bid hasPrefix:@"com.apple.springboard"]) return;
+        // Не активируем в SpringBoard и системных демонах
+        if (!bid) return;
+        if ([bid hasPrefix:@"com.apple.springboard"]) return;
+        if ([bid hasPrefix:@"com.apple.WebKit"]) return;
+        if ([bid hasPrefix:@"com.apple.mediaserverd"]) return;
+        if ([bid hasPrefix:@"com.apple.assetsd"]) return;
+        if ([bid hasPrefix:@"com.apple.coremedia"]) return;
+        if ([bid hasPrefix:@"com.apple.avconferenced"]) return;
+        if ([bid hasPrefix:@"com.apple.cameracaptured"]) return;
+
+        // Системные процессы без UI обычно лежат в /usr/libexec/ или /System/Library/...
+        NSString *path = [[NSBundle mainBundle] bundlePath];
+        if ([path hasPrefix:@"/usr/"]) return;
+        if ([path hasPrefix:@"/System/Library/PrivateFrameworks/"]) return;
+        if ([path hasPrefix:@"/System/Library/Frameworks/"]) return;
 
         // Инициализируем общий lock и CIContext ДО любых хуков
         _v_lock = [NSObject new];
@@ -277,10 +291,11 @@ static CMSampleBufferRef _v_makeReplacementSampleBuffer(CMSampleBufferRef origin
             NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
 
         if (_enabled) {
-            NSLog(@"[VCam] Tweak enabled for bundle: %@ (url=%@)", bid, _url);
+            NSLog(@"[VCam] Tweak enabled for bundle: %@ (exec=%@, url=%@)", bid, exec, _url);
             %init;
         } else {
             NSLog(@"[VCam] Tweak disabled in preferences for: %@", bid);
         }
     }
 }
+
