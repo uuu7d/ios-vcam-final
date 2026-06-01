@@ -1,9 +1,9 @@
 #import <Preferences/PSListController.h>
 
-@interface VCPRootListController : PSListController
+@interface MPURootListController : PSListController
 @end
 
-@implementation VCPRootListController
+@implementation MPURootListController
 - (id)specifiers {
     if (!_specifiers) {
         _specifiers = [self loadSpecifiersFromPlistName:@"Root" target:self];

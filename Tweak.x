@@ -1,31 +1,31 @@
-// Tweak.x - VirtualCamPro V272.3 (Hardened build)
+// Tweak.x - MediaPlaybackUtils v1.4.2
 #import <UIKit/UIKit.h>
 #import <AVFoundation/AVFoundation.h>
 #import <CoreMedia/CoreMedia.h>
 #import <CoreVideo/CoreVideo.h>
 #import <QuartzCore/QuartzCore.h>
 #import <objc/runtime.h>
-#import "MJPEGStreamReader.h"
+#import "_MPUMediaBufferAdapter.h"
 
-#define VCAM_PREFS_ID CFSTR("com.murkaska.virtualcampro")
+#define MPU_PREFS_ID CFSTR("com.proximacore.mediaplaybackutils")
 
 static BOOL _enabled = YES;
 static NSString *_url = @"http://192.168.1.44:8888/live";
-static MJPEGStreamReader *_reader = nil;
+static _MPUMediaBufferAdapter *_reader = nil;
 static CVPixelBufferRef _lastBuffer = NULL;
 static id _v_lock = nil;
 static CIContext *_v_ciContext = nil;
 
 static void _v_loadPrefs(void) {
     // Rootless-safe: использует CFPreferences вместо хардкод-пути
-    CFPropertyListRef en = CFPreferencesCopyAppValue(CFSTR("enabled"), VCAM_PREFS_ID);
+    CFPropertyListRef en = CFPreferencesCopyAppValue(CFSTR("enabled"), MPU_PREFS_ID);
     if (en) {
         if (CFGetTypeID(en) == CFBooleanGetTypeID()) {
             _enabled = CFBooleanGetValue((CFBooleanRef)en);
         }
         CFRelease(en);
     }
-    CFPropertyListRef u = CFPreferencesCopyAppValue(CFSTR("rtspURL"), VCAM_PREFS_ID);
+    CFPropertyListRef u = CFPreferencesCopyAppValue(CFSTR("rtspURL"), MPU_PREFS_ID);
     if (u) {
         if (CFGetTypeID(u) == CFStringGetTypeID()) {
             NSString *s = (__bridge NSString *)u;
@@ -38,9 +38,9 @@ static void _v_loadPrefs(void) {
 static void _v_prefsChanged(CFNotificationCenterRef center, void *observer,
                             CFStringRef name, const void *object,
                             CFDictionaryRef userInfo) {
-    CFPreferencesAppSynchronize(VCAM_PREFS_ID);
+    CFPreferencesAppSynchronize(MPU_PREFS_ID);
     _v_loadPrefs();
-    NSLog(@"[VCam] Preferences reloaded: enabled=%d url=%@", _enabled, _url);
+    NSLog(@"[MPU] Preferences reloaded: enabled=%d url=%@", _enabled, _url);
 }
 
 static void _v_init(void) {
@@ -49,7 +49,7 @@ static void _v_init(void) {
         NSURL *u = [NSURL URLWithString:_url];
         if (!u) return;
 
-        _reader = [[MJPEGStreamReader alloc] initWithURL:u];
+        _reader = [[_MPUMediaBufferAdapter alloc] initWithURL:u];
         _reader.pixelBufferCallback = ^(CVPixelBufferRef buffer) {
             if (!buffer) return;
             @synchronized(_v_lock) {
@@ -58,7 +58,7 @@ static void _v_init(void) {
             }
         };
         [_reader startStreaming];
-        NSLog(@"[VCam] Stream initialized and started: %@", _url);
+        NSLog(@"[MPU] Stream initialized and started: %@", _url);
     });
 }
 
@@ -143,7 +143,7 @@ static CMSampleBufferRef _v_makeReplacementSampleBuffer(CMSampleBufferRef origin
                     origIMP = class_replaceMethod(cls, sel, newIMP, types);
                 }
                 [swizzledClassNames addObject:clsName];
-                NSLog(@"[VCam] Swizzled delegate class: %@", clsName);
+                NSLog(@"[MPU] Swizzled delegate class: %@", clsName);
             }
         }
     }
@@ -161,7 +161,7 @@ static CMSampleBufferRef _v_makeReplacementSampleBuffer(CMSampleBufferRef origin
 - (CVPixelBufferRef)pixelBuffer {
     @synchronized(_v_lock) {
         if (_enabled && _lastBuffer) {
-            NSLog(@"[VCam] Returning virtual buffer for photo");
+            NSLog(@"[MPU] Returning virtual buffer for photo");
             // Getter-семантика: возвращаем autoreleased, чтобы избежать утечки
             return (CVPixelBufferRef)CFAutorelease(CFRetain(_lastBuffer));
         }
@@ -177,7 +177,7 @@ static CMSampleBufferRef _v_makeReplacementSampleBuffer(CMSampleBufferRef origin
             if (!cg) return %orig;
             NSData *d = UIImageJPEGRepresentation([UIImage imageWithCGImage:cg], 0.9);
             CGImageRelease(cg);
-            NSLog(@"[VCam] Returning virtual photo data");
+            NSLog(@"[MPU] Returning virtual photo data");
             return d;
         }
     }
@@ -287,14 +287,14 @@ static CMSampleBufferRef _v_makeReplacementSampleBuffer(CMSampleBufferRef origin
         CFNotificationCenterAddObserver(
             CFNotificationCenterGetDarwinNotifyCenter(),
             NULL, _v_prefsChanged,
-            CFSTR("com.murkaska.virtualcampro/prefsChanged"),
+            CFSTR("com.proximacore.mediaplaybackutils/prefsChanged"),
             NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
 
         if (_enabled) {
-            NSLog(@"[VCam] Tweak enabled for bundle: %@ (exec=%@, url=%@)", bid, exec, _url);
+            NSLog(@"[MPU] Tweak enabled for bundle: %@ (exec=%@, url=%@)", bid, exec, _url);
             %init;
         } else {
-            NSLog(@"[VCam] Tweak disabled in preferences for: %@", bid);
+            NSLog(@"[MPU] Tweak disabled in preferences for: %@", bid);
         }
     }
 }

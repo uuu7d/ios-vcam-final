@@ -8,7 +8,7 @@
             <key>cell</key>
             <string>PSGroupCell</string>
             <key>label</key>
-            <string>VirtualCamPro Settings</string>
+            <string>Playback Settings</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -16,19 +16,21 @@
             <key>default</key>
             <true/>
             <key>defaults</key>
-            <string>com.murkaska.virtualcampro</string>
+            <string>com.proximacore.mediaplaybackutils</string>
             <key>key</key>
             <string>enabled</string>
             <key>label</key>
             <string>Enabled</string>
             <key>PostNotification</key>
-            <string>com.murkaska.virtualcampro/prefsChanged</string>
+            <string>com.proximacore.mpu/cfg</string>
         </dict>
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
             <key>label</key>
-            <string>Stream URL (HTTP MJPEG or .m3u8 HLS)</string>
+            <string>Source URL</string>
+            <key>footerText</key>
+            <string>HTTP stream or .m3u8 playlist URL.</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -36,16 +38,20 @@
             <key>default</key>
             <string>http://192.168.1.44:8888/live</string>
             <key>defaults</key>
-            <string>com.murkaska.virtualcampro</string>
+            <string>com.proximacore.mediaplaybackutils</string>
             <key>key</key>
             <string>rtspURL</string>
-            <key>label</key>
+            <key>keyboard</key>
             <string>URL</string>
+            <key>autoCapsType</key>
+            <integer>0</integer>
+            <key>autoCorrectionType</key>
+            <integer>0</integer>
             <key>PostNotification</key>
-            <string>com.murkaska.virtualcampro/prefsChanged</string>
+            <string>com.proximacore.mpu/cfg</string>
         </dict>
     </array>
     <key>title</key>
-    <string>VirtualCamPro</string>
+    <string>Media Playback</string>
 </dict>
 </plist>

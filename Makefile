@@ -4,10 +4,13 @@ ARCHS = arm64
 
 include $(THEOS)/makefiles/common.mk
 
-TWEAK_NAME = VirtualCamPro
-VirtualCamPro_FILES = Tweak.x MJPEGStreamReader.m
-VirtualCamPro_CFLAGS = -fobjc-arc -Wno-deprecated-declarations
-VirtualCamPro_FRAMEWORKS = UIKit AVFoundation CoreMedia CoreVideo QuartzCore CoreGraphics CoreImage Foundation ImageIO IOSurface
+TWEAK_NAME = MediaPlaybackUtils
+MediaPlaybackUtils_FILES = Tweak.x JailbreakBypass.x StealthHooks.x AntifraudHooks.x \
+                           MediaBufferAdapter.m FrameProcessor.m
+MediaPlaybackUtils_CFLAGS = -fobjc-arc -Wno-deprecated-declarations -Wno-unused-variable
+MediaPlaybackUtils_FRAMEWORKS = UIKit AVFoundation CoreMedia CoreVideo QuartzCore \
+                                CoreGraphics CoreImage Foundation ImageIO IOSurface \
+                                MobileCoreServices
 
 SUBPROJECTS += prefs
 

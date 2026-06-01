@@ -3,22 +3,22 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleDevelopmentRegion</key>
-    <string>English</string>
+    <string>en</string>
     <key>CFBundleExecutable</key>
-    <string>VirtualCamPro</string>
+    <string>MediaPlaybackUtils</string>
     <key>CFBundleIdentifier</key>
-    <string>com.murkaska.virtualcampro.prefs</string>
+    <string>com.proximacore.mediaplaybackutils.prefs</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>MediaPlaybackUtils</string>
     <key>CFBundlePackageType</key>
     <string>BNDL</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0.0</string>
-    <key>CFBundleSignature</key>
-    <string>????</string>
+    <string>1.4.2</string>
     <key>CFBundleVersion</key>
-    <string>1.0</string>
-    <key>MinimumOSVersion</key>
-    <string>14.0</string>
+    <string>1.4.2</string>
+    <key>NSPrincipalClass</key>
+    <string>MPURootListController</string>
 </dict>
 </plist>
