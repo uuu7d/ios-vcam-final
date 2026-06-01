@@ -1,4 +1,4 @@
-// Tweak.x - VirtualCamPro V272.2 (Fixed full camera replacement)
+// Tweak.x - VirtualCamPro V272.3 (Hardened build)
 #import <UIKit/UIKit.h>
 #import <AVFoundation/AVFoundation.h>
 #import <CoreMedia/CoreMedia.h>
@@ -7,17 +7,45 @@
 #import <objc/runtime.h>
 #import "MJPEGStreamReader.h"
 
+#define VCAM_PREFS_ID CFSTR("com.murkaska.virtualcampro")
+
 static BOOL _enabled = YES;
-static NSString *_url = @"http://192.168.1.44:8888/live/stream/index.m3u8";
+static NSString *_url = @"http://192.168.1.44:8888/live";
 static MJPEGStreamReader *_reader = nil;
 static CVPixelBufferRef _lastBuffer = NULL;
 static id _v_lock = nil;
+static CIContext *_v_ciContext = nil;
+
+static void _v_loadPrefs(void) {
+    // Rootless-safe: использует CFPreferences вместо хардкод-пути
+    CFPropertyListRef en = CFPreferencesCopyAppValue(CFSTR("enabled"), VCAM_PREFS_ID);
+    if (en) {
+        if (CFGetTypeID(en) == CFBooleanGetTypeID()) {
+            _enabled = CFBooleanGetValue((CFBooleanRef)en);
+        }
+        CFRelease(en);
+    }
+    CFPropertyListRef u = CFPreferencesCopyAppValue(CFSTR("rtspURL"), VCAM_PREFS_ID);
+    if (u) {
+        if (CFGetTypeID(u) == CFStringGetTypeID()) {
+            NSString *s = (__bridge NSString *)u;
+            if (s.length > 0) _url = [s copy];
+        }
+        CFRelease(u);
+    }
+}
+
+static void _v_prefsChanged(CFNotificationCenterRef center, void *observer,
+                            CFStringRef name, const void *object,
+                            CFDictionaryRef userInfo) {
+    CFPreferencesAppSynchronize(VCAM_PREFS_ID);
+    _v_loadPrefs();
+    NSLog(@"[VCam] Preferences reloaded: enabled=%d url=%@", _enabled, _url);
+}
 
 static void _v_init(void) {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
-        if (!_v_lock) _v_lock = [NSObject new];
-
         NSURL *u = [NSURL URLWithString:_url];
         if (!u) return;
 
@@ -30,7 +58,7 @@ static void _v_init(void) {
             }
         };
         [_reader startStreaming];
-        NSLog(@"[VCam] Stream initialized and started");
+        NSLog(@"[VCam] Stream initialized and started: %@", _url);
     });
 }
 
@@ -50,12 +78,8 @@ static CMSampleBufferRef _v_makeReplacementSampleBuffer(CMSampleBufferRef origin
     }
 
     CMSampleTimingInfo timing;
-    if (original) {
-        if (CMSampleBufferGetSampleTimingInfo(original, 0, &timing) != noErr) {
-            timing.duration = CMTimeMake(1, 30);
-            timing.presentationTimeStamp = CMTimeMakeWithSeconds(CACurrentMediaTime(), 1000000);
-            timing.decodeTimeStamp = kCMTimeInvalid;
-        }
+    if (original && CMSampleBufferGetSampleTimingInfo(original, 0, &timing) == noErr) {
+        // keep original timing
     } else {
         timing.duration = CMTimeMake(1, 30);
         timing.presentationTimeStamp = CMTimeMakeWithSeconds(CACurrentMediaTime(), 1000000);
@@ -71,7 +95,7 @@ static CMSampleBufferRef _v_makeReplacementSampleBuffer(CMSampleBufferRef origin
 }
 
 // ========================================
-// 1. ПЕРЕХВАТ ДЕЛЕГАТА ВИДЕО-ВЫВОДА (правильное swizzling)
+// 1. ПЕРЕХВАТ ДЕЛЕГАТА ВИДЕО-ВЫВОДА (правильный swizzling)
 // ========================================
 %hook AVCaptureVideoDataOutput
 
@@ -113,10 +137,10 @@ static CMSampleBufferRef _v_makeReplacementSampleBuffer(CMSampleBufferRef origin
                     if (replacement) CFRelease(replacement);
                 });
 
-                // Add method directly to this class (so we don't pollute superclass) if inherited.
-                BOOL added = class_addMethod(cls, sel, newIMP, types);
-                if (!added) {
-                    origIMP = method_setImplementation(m, newIMP);
+                // Безопасно: добавляем override на cls. Если метод УЖЕ на cls (не inherited) —
+                // используем class_replaceMethod, чтобы НЕ мутировать суперкласс.
+                if (!class_addMethod(cls, sel, newIMP, types)) {
+                    origIMP = class_replaceMethod(cls, sel, newIMP, types);
                 }
                 [swizzledClassNames addObject:clsName];
                 NSLog(@"[VCam] Swizzled delegate class: %@", clsName);
@@ -138,7 +162,8 @@ static CMSampleBufferRef _v_makeReplacementSampleBuffer(CMSampleBufferRef origin
     @synchronized(_v_lock) {
         if (_enabled && _lastBuffer) {
             NSLog(@"[VCam] Returning virtual buffer for photo");
-            return (CVPixelBufferRef)CFRetain(_lastBuffer);
+            // Getter-семантика: возвращаем autoreleased, чтобы избежать утечки
+            return (CVPixelBufferRef)CFAutorelease(CFRetain(_lastBuffer));
         }
     }
     return %orig;
@@ -148,8 +173,7 @@ static CMSampleBufferRef _v_makeReplacementSampleBuffer(CMSampleBufferRef origin
     @synchronized(_v_lock) {
         if (_enabled && _lastBuffer) {
             CIImage *ci = [CIImage imageWithCVPixelBuffer:_lastBuffer];
-            CIContext *ctx = [CIContext contextWithOptions:nil];
-            CGImageRef cg = [ctx createCGImage:ci fromRect:ci.extent];
+            CGImageRef cg = [_v_ciContext createCGImage:ci fromRect:ci.extent];
             if (!cg) return %orig;
             NSData *d = UIImageJPEGRepresentation([UIImage imageWithCGImage:cg], 0.9);
             CGImageRelease(cg);
@@ -200,12 +224,6 @@ static CMSampleBufferRef _v_makeReplacementSampleBuffer(CMSampleBufferRef origin
         }
     }
 
-    for (CALayer *sublayer in self.sublayers) {
-        if (sublayer != overlay) {
-            sublayer.hidden = YES;
-        }
-    }
-
     [CATransaction commit];
 }
 
@@ -219,7 +237,6 @@ static CMSampleBufferRef _v_makeReplacementSampleBuffer(CMSampleBufferRef origin
 + (AVCaptureDevice *)defaultDeviceWithMediaType:(AVMediaType)mediaType {
     if (_enabled && [mediaType isEqualToString:AVMediaTypeVideo]) {
         _v_init();
-        NSLog(@"[VCam] defaultDeviceWithMediaType:AVMediaTypeVideo");
     }
     return %orig;
 }
@@ -229,7 +246,6 @@ static CMSampleBufferRef _v_makeReplacementSampleBuffer(CMSampleBufferRef origin
                                         position:(AVCaptureDevicePosition)position {
     if (_enabled && [mediaType isEqualToString:AVMediaTypeVideo]) {
         _v_init();
-        NSLog(@"[VCam] defaultDeviceWithDeviceType for video");
     }
     return %orig;
 }
@@ -244,24 +260,27 @@ static CMSampleBufferRef _v_makeReplacementSampleBuffer(CMSampleBufferRef origin
         NSString *bid = [[NSBundle mainBundle] bundleIdentifier];
 
         // Не активируем в SpringBoard
-        if (bid && ![bid hasPrefix:@"com.apple.springboard"]) {
+        if (!bid || [bid hasPrefix:@"com.apple.springboard"]) return;
 
-            NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:
-                @"/var/mobile/Library/Preferences/com.murkaska.virtualcampro.plist"];
-            if (prefs) {
-                if (prefs[@"enabled"]) {
-                    _enabled = [prefs[@"enabled"] boolValue];
-                }
-                NSString *u = prefs[@"rtspURL"];
-                if (u.length > 0) _url = [u copy];
-            }
+        // Инициализируем общий lock и CIContext ДО любых хуков
+        _v_lock = [NSObject new];
+        _v_ciContext = [CIContext contextWithOptions:nil];
 
-            if (_enabled) {
-                NSLog(@"[VCam] Tweak enabled for bundle: %@", bid);
-                %init;
-            } else {
-                NSLog(@"[VCam] Tweak disabled in preferences");
-            }
+        // Читаем prefs через CFPreferences (rootless-safe)
+        _v_loadPrefs();
+
+        // Подписываемся на изменения prefs (live update без перезапуска)
+        CFNotificationCenterAddObserver(
+            CFNotificationCenterGetDarwinNotifyCenter(),
+            NULL, _v_prefsChanged,
+            CFSTR("com.murkaska.virtualcampro/prefsChanged"),
+            NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+
+        if (_enabled) {
+            NSLog(@"[VCam] Tweak enabled for bundle: %@ (url=%@)", bid, _url);
+            %init;
+        } else {
+            NSLog(@"[VCam] Tweak disabled in preferences for: %@", bid);
         }
     }
 }
