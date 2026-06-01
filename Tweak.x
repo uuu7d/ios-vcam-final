@@ -1,46 +1,58 @@
-// Tweak.x - VirtualCamPro V272.2 (Fixed full camera replacement)
+"// Tweak.x - VirtualCamPro V273.0 (critical-bug fixes pass 1)
 #import <UIKit/UIKit.h>
 #import <AVFoundation/AVFoundation.h>
 #import <CoreMedia/CoreMedia.h>
 #import <CoreVideo/CoreVideo.h>
 #import <QuartzCore/QuartzCore.h>
 #import <objc/runtime.h>
-#import "MJPEGStreamReader.h"
+#import <os/lock.h>
+#import \"MJPEGStreamReader.h\"
 
 static BOOL _enabled = YES;
-static NSString *_url = @"http://192.168.1.44:8888/live/stream/index.m3u8";
+static NSString *_url = @\"http://192.168.1.44:8888/live/stream/index.m3u8\";
 static MJPEGStreamReader *_reader = nil;
 static CVPixelBufferRef _lastBuffer = NULL;
-static id _v_lock = nil;
+
+// Use os_unfair_lock — fast, no exceptions, safe for static init.
+static os_unfair_lock _v_lock = OS_UNFAIR_LOCK_INIT;
+
+static void _v_set_last_buffer(CVPixelBufferRef buf) {
+    os_unfair_lock_lock(&_v_lock);
+    if (_lastBuffer) CVPixelBufferRelease(_lastBuffer);
+    _lastBuffer = buf ? CVPixelBufferRetain(buf) : NULL;
+    os_unfair_lock_unlock(&_v_lock);
+}
+
+static CVPixelBufferRef _v_copy_last_buffer(void) CF_RETURNS_RETAINED {
+    os_unfair_lock_lock(&_v_lock);
+    CVPixelBufferRef out = _lastBuffer ? CVPixelBufferRetain(_lastBuffer) : NULL;
+    os_unfair_lock_unlock(&_v_lock);
+    return out;
+}
 
 static void _v_init(void) {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
-        if (!_v_lock) _v_lock = [NSObject new];
-
         NSURL *u = [NSURL URLWithString:_url];
-        if (!u) return;
+        if (!u) {
+            NSLog(@\"[VCam] Invalid URL: %@\", _url);
+            return;
+        }
 
         _reader = [[MJPEGStreamReader alloc] initWithURL:u];
         _reader.pixelBufferCallback = ^(CVPixelBufferRef buffer) {
             if (!buffer) return;
-            @synchronized(_v_lock) {
-                if (_lastBuffer) CVPixelBufferRelease(_lastBuffer);
-                _lastBuffer = CVPixelBufferRetain(buffer);
-            }
+            _v_set_last_buffer(buffer);
         };
         [_reader startStreaming];
-        NSLog(@"[VCam] Stream initialized and started");
+        NSLog(@\"[VCam] Stream initialized: %@\", u);
     });
 }
 
 // Build a fresh CMSampleBuffer from our _lastBuffer, optionally reusing timing from original.
 // Returns retained sample buffer (caller releases) or NULL.
 static CMSampleBufferRef _v_makeReplacementSampleBuffer(CMSampleBufferRef original) {
-    CVPixelBufferRef src = NULL;
-    @synchronized(_v_lock) {
-        if (_lastBuffer) src = CVPixelBufferRetain(_lastBuffer);
-    }
+    CVPixelBufferRef src = _v_copy_last_buffer();
     if (!src) return NULL;
 
     CMVideoFormatDescriptionRef fmt = NULL;
@@ -50,12 +62,8 @@ static CMSampleBufferRef _v_makeReplacementSampleBuffer(CMSampleBufferRef origin
     }
 
     CMSampleTimingInfo timing;
-    if (original) {
-        if (CMSampleBufferGetSampleTimingInfo(original, 0, &timing) != noErr) {
-            timing.duration = CMTimeMake(1, 30);
-            timing.presentationTimeStamp = CMTimeMakeWithSeconds(CACurrentMediaTime(), 1000000);
-            timing.decodeTimeStamp = kCMTimeInvalid;
-        }
+    if (original && CMSampleBufferGetSampleTimingInfo(original, 0, &timing) == noErr) {
+        // reuse original timing
     } else {
         timing.duration = CMTimeMake(1, 30);
         timing.presentationTimeStamp = CMTimeMakeWithSeconds(CACurrentMediaTime(), 1000000);
@@ -71,7 +79,7 @@ static CMSampleBufferRef _v_makeReplacementSampleBuffer(CMSampleBufferRef origin
 }
 
 // ========================================
-// 1. ПЕРЕХВАТ ДЕЛЕГАТА ВИДЕО-ВЫВОДА (правильное swizzling)
+// 1. ПЕРЕХВАТ ДЕЛЕГАТА ВИДЕО-ВЫВОДА
 // ========================================
 %hook AVCaptureVideoDataOutput
 
@@ -97,7 +105,7 @@ static CMSampleBufferRef _v_makeReplacementSampleBuffer(CMSampleBufferRef origin
             Method m = class_getInstanceMethod(cls, sel);
             if (m) {
                 const char *types = method_getTypeEncoding(m);
-                __block IMP origIMP = method_getImplementation(m);
+                IMP origIMP = method_getImplementation(m);
 
                 IMP newIMP = imp_implementationWithBlock(^(id self_,
                                                            AVCaptureOutput *output,
@@ -113,13 +121,32 @@ static CMSampleBufferRef _v_makeReplacementSampleBuffer(CMSampleBufferRef origin
                     if (replacement) CFRelease(replacement);
                 });
 
-                // Add method directly to this class (so we don't pollute superclass) if inherited.
+                // Always add the method directly to `cls`.
+                // If the method is inherited (class_addMethod returns YES), we get our own slot
+                // and DO NOT touch the superclass implementation.
+                // If `cls` already implements it directly, class_addMethod returns NO and we
+                // safely method_setImplementation on the class's own method.
                 BOOL added = class_addMethod(cls, sel, newIMP, types);
                 if (!added) {
-                    origIMP = method_setImplementation(m, newIMP);
+                    // Refetch the method *on cls itself* to be sure we don't modify the
+                    // superclass when the implementation lives there.
+                    Method ownMethod = NULL;
+                    unsigned int count = 0;
+                    Method *list = class_copyMethodList(cls, &count);
+                    for (unsigned int i = 0; i < count; i++) {
+                        if (method_getName(list[i]) == sel) { ownMethod = list[i]; break; }
+                    }
+                    free(list);
+                    if (ownMethod) {
+                        method_setImplementation(ownMethod, newIMP);
+                    } else {
+                        // Fallback: class_addMethod failed and method lives on superclass.
+                        // Add a fresh slot on cls forcefully.
+                        class_replaceMethod(cls, sel, newIMP, types);
+                    }
                 }
                 [swizzledClassNames addObject:clsName];
-                NSLog(@"[VCam] Swizzled delegate class: %@", clsName);
+                NSLog(@\"[VCam] Swizzled delegate class: %@\", clsName);
             }
         }
     }
@@ -134,26 +161,30 @@ static CMSampleBufferRef _v_makeReplacementSampleBuffer(CMSampleBufferRef origin
 // ========================================
 %hook AVCapturePhoto
 
+// AVCapturePhoto.pixelBuffer is CF_RETURNS_NOT_RETAINED — return autoreleased.
 - (CVPixelBufferRef)pixelBuffer {
-    @synchronized(_v_lock) {
-        if (_enabled && _lastBuffer) {
-            NSLog(@"[VCam] Returning virtual buffer for photo");
-            return (CVPixelBufferRef)CFRetain(_lastBuffer);
+    if (_enabled) {
+        CVPixelBufferRef buf = _v_copy_last_buffer();
+        if (buf) {
+            NSLog(@\"[VCam] Returning virtual buffer for photo\");
+            return (CVPixelBufferRef)CFAutorelease(buf);
         }
     }
     return %orig;
 }
 
 - (NSData *)fileDataRepresentation {
-    @synchronized(_v_lock) {
-        if (_enabled && _lastBuffer) {
-            CIImage *ci = [CIImage imageWithCVPixelBuffer:_lastBuffer];
+    if (_enabled) {
+        CVPixelBufferRef buf = _v_copy_last_buffer();
+        if (buf) {
+            CIImage *ci = [CIImage imageWithCVPixelBuffer:buf];
             CIContext *ctx = [CIContext contextWithOptions:nil];
             CGImageRef cg = [ctx createCGImage:ci fromRect:ci.extent];
+            CVPixelBufferRelease(buf);
             if (!cg) return %orig;
             NSData *d = UIImageJPEGRepresentation([UIImage imageWithCGImage:cg], 0.9);
             CGImageRelease(cg);
-            NSLog(@"[VCam] Returning virtual photo data");
+            NSLog(@\"[VCam] Returning virtual photo data\");
             return d;
         }
     }
@@ -163,7 +194,7 @@ static CMSampleBufferRef _v_makeReplacementSampleBuffer(CMSampleBufferRef origin
 %end
 
 // ========================================
-// 3. ПЕРЕХВАТ ПРЕДПРОСМОТРА КАМЕРЫ (визуальная подмена)
+// 3. ПЕРЕХВАТ ПРЕДПРОСМОТРА КАМЕРЫ
 // ========================================
 %hook AVCaptureVideoPreviewLayer
 
@@ -173,37 +204,37 @@ static CMSampleBufferRef _v_makeReplacementSampleBuffer(CMSampleBufferRef origin
 
     _v_init();
 
-    CALayer *overlay = objc_getAssociatedObject(self, "_v_overlay");
+    CALayer *overlay = objc_getAssociatedObject(self, \"_v_overlay\");
     if (!overlay) {
         overlay = [CALayer layer];
         overlay.contentsGravity = kCAGravityResizeAspectFill;
-        overlay.zPosition = 999999;
         overlay.backgroundColor = [UIColor blackColor].CGColor;
         overlay.opaque = YES;
         [self addSublayer:overlay];
-        objc_setAssociatedObject(self, "_v_overlay", overlay, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(self, \"_v_overlay\", overlay, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+
+    // Always keep overlay as the topmost sublayer (don't hide siblings — that breaks HUD).
+    if (overlay.superlayer == self) {
+        [overlay removeFromSuperlayer];
+        [self addSublayer:overlay];
     }
 
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
 
     overlay.frame = self.bounds;
+    overlay.zPosition = CGFLOAT_MAX;
     overlay.hidden = NO;
     overlay.opacity = 1.0;
 
-    @synchronized(_v_lock) {
-        if (_lastBuffer) {
-            IOSurfaceRef surf = CVPixelBufferGetIOSurface(_lastBuffer);
-            if (surf) {
-                overlay.contents = (__bridge id)surf;
-            }
+    CVPixelBufferRef buf = _v_copy_last_buffer();
+    if (buf) {
+        IOSurfaceRef surf = CVPixelBufferGetIOSurface(buf);
+        if (surf) {
+            overlay.contents = (__bridge id)surf;
         }
-    }
-
-    for (CALayer *sublayer in self.sublayers) {
-        if (sublayer != overlay) {
-            sublayer.hidden = YES;
-        }
+        CVPixelBufferRelease(buf);
     }
 
     [CATransaction commit];
@@ -219,7 +250,6 @@ static CMSampleBufferRef _v_makeReplacementSampleBuffer(CMSampleBufferRef origin
 + (AVCaptureDevice *)defaultDeviceWithMediaType:(AVMediaType)mediaType {
     if (_enabled && [mediaType isEqualToString:AVMediaTypeVideo]) {
         _v_init();
-        NSLog(@"[VCam] defaultDeviceWithMediaType:AVMediaTypeVideo");
     }
     return %orig;
 }
@@ -229,7 +259,6 @@ static CMSampleBufferRef _v_makeReplacementSampleBuffer(CMSampleBufferRef origin
                                         position:(AVCaptureDevicePosition)position {
     if (_enabled && [mediaType isEqualToString:AVMediaTypeVideo]) {
         _v_init();
-        NSLog(@"[VCam] defaultDeviceWithDeviceType for video");
     }
     return %orig;
 }
@@ -244,24 +273,25 @@ static CMSampleBufferRef _v_makeReplacementSampleBuffer(CMSampleBufferRef origin
         NSString *bid = [[NSBundle mainBundle] bundleIdentifier];
 
         // Не активируем в SpringBoard
-        if (bid && ![bid hasPrefix:@"com.apple.springboard"]) {
+        if (bid && ![bid hasPrefix:@\"com.apple.springboard\"]) {
 
             NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:
-                @"/var/mobile/Library/Preferences/com.murkaska.virtualcampro.plist"];
+                @\"/var/mobile/Library/Preferences/com.murkaska.virtualcampro.plist\"];
             if (prefs) {
-                if (prefs[@"enabled"]) {
-                    _enabled = [prefs[@"enabled"] boolValue];
+                if (prefs[@\"enabled\"]) {
+                    _enabled = [prefs[@\"enabled\"] boolValue];
                 }
-                NSString *u = prefs[@"rtspURL"];
+                NSString *u = prefs[@\"rtspURL\"];
                 if (u.length > 0) _url = [u copy];
             }
 
             if (_enabled) {
-                NSLog(@"[VCam] Tweak enabled for bundle: %@", bid);
+                NSLog(@\"[VCam] Tweak enabled for bundle: %@\", bid);
                 %init;
             } else {
-                NSLog(@"[VCam] Tweak disabled in preferences");
+                NSLog(@\"[VCam] Tweak disabled in preferences\");
             }
         }
     }
 }
+"
