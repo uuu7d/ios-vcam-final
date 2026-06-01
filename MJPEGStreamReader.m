@@ -1,4 +1,4 @@
-// MJPEGStreamReader.m - VirtualCamPro V272.2 (Fixed)
+// MJPEGStreamReader.m - VirtualCamPro V272.3 (Fixed + perf)
 #import "MJPEGStreamReader.h"
 #import <AVFoundation/AVFoundation.h>
 #import <CoreVideo/CoreVideo.h>
@@ -10,6 +10,7 @@
 @property (nonatomic, strong) NSURLSession *session;
 @property (nonatomic, strong) NSURLSessionDataTask *task;
 @property (nonatomic, strong) NSMutableData *imageData;
+@property (nonatomic, assign) NSUInteger parseCursor;
 @property (nonatomic, assign) BOOL isRunning;
 
 @property (nonatomic, strong) AVPlayer *hlsPlayer;
@@ -18,6 +19,7 @@
 @property (nonatomic, strong) CADisplayLink *displayLink;
 @property (nonatomic, assign) BOOL isHLS;
 
+@property (nonatomic, strong) CIContext *ciContext;
 @property (nonatomic, assign, readwrite) BOOL isConnecting;
 @end
 
@@ -30,9 +32,12 @@
         _isConnecting = NO;
         _frameCount = 0;
         _lastFrameTime = 0;
+        _parseCursor = 0;
+        _ciContext = [CIContext contextWithOptions:nil];
 
-        NSString *urlString = url.absoluteString.lowercaseString;
-        _isHLS = [urlString hasSuffix:@".m3u8"] || [urlString containsString:@".m3u8"];
+        // HLS определяем только по .m3u8 в path (а не во всей строке)
+        NSString *path = url.path.lowercaseString ?: @"";
+        _isHLS = [path hasSuffix:@".m3u8"];
 
         NSLog(@"[VCamStream] Initialized with URL: %@, type: %@", url, _isHLS ? @"HLS" : @"MJPEG");
     }
@@ -127,8 +132,7 @@
 
     if (self.frameCallback) {
         CIImage *ciImage = [CIImage imageWithCVPixelBuffer:pixelBuffer];
-        CIContext *ctx = [CIContext contextWithOptions:nil];
-        CGImageRef cgImage = [ctx createCGImage:ciImage fromRect:ciImage.extent];
+        CGImageRef cgImage = [self.ciContext createCGImage:ciImage fromRect:ciImage.extent];
         UIImage *image = cgImage ? [UIImage imageWithCGImage:cgImage] : nil;
         if (cgImage) CGImageRelease(cgImage);
         CVPixelBufferRelease(pixelBuffer);
@@ -178,11 +182,12 @@
 - (void)startMJPEGStream {
     NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
     config.timeoutIntervalForRequest = 30.0;
-    config.timeoutIntervalForResource = 300.0;
+    config.timeoutIntervalForResource = 0; // бесконечный поток
     config.HTTPMaximumConnectionsPerHost = 1;
 
     self.session = [NSURLSession sessionWithConfiguration:config delegate:self delegateQueue:nil];
     self.imageData = [NSMutableData data];
+    self.parseCursor = 0;
 
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:self.streamURL];
     [request setValue:@"multipart/x-mixed-replace" forHTTPHeaderField:@"Accept"];
@@ -199,6 +204,7 @@
     [self.session invalidateAndCancel];
     self.session = nil;
     self.imageData = nil;
+    self.parseCursor = 0;
 }
 
 - (void)URLSession:(NSURLSession *)session
@@ -261,19 +267,37 @@ didReceiveResponse:(NSURLResponse *)response
 
     [self.imageData appendData:data];
 
-    NSData *startMarker = [NSData dataWithBytes:(unsigned char[]){0xFF, 0xD8} length:2];
-    NSData *endMarker = [NSData dataWithBytes:(unsigned char[]){0xFF, 0xD9} length:2];
+    static const unsigned char SOI[2] = {0xFF, 0xD8};
+    static const unsigned char EOI[2] = {0xFF, 0xD9};
+    NSData *startMarker = [NSData dataWithBytesNoCopy:(void *)SOI length:2 freeWhenDone:NO];
+    NSData *endMarker   = [NSData dataWithBytesNoCopy:(void *)EOI length:2 freeWhenDone:NO];
 
-    NSRange sRange = [self.imageData rangeOfData:startMarker options:0
-                                           range:NSMakeRange(0, self.imageData.length)];
-    NSRange eRange = [self.imageData rangeOfData:endMarker options:0
-                                           range:NSMakeRange(0, self.imageData.length)];
+    // Парсим все полные JPEG-кадры в буфере, ищем с parseCursor (O(N) суммарно)
+    while (YES) {
+        NSUInteger len = self.imageData.length;
+        if (self.parseCursor >= len) break;
 
-    if (sRange.location != NSNotFound && eRange.location != NSNotFound &&
-        eRange.location > sRange.location) {
+        NSRange searchRange = NSMakeRange(self.parseCursor, len - self.parseCursor);
+        NSRange sRange = [self.imageData rangeOfData:startMarker options:0 range:searchRange];
+        if (sRange.location == NSNotFound) {
+            // нет SOI — отбросить весь хвост (мусор), оставить последний байт на случай "FF" в конце
+            if (len > 1) {
+                [self.imageData replaceBytesInRange:NSMakeRange(0, len - 1) withBytes:NULL length:0];
+            }
+            self.parseCursor = 0;
+            break;
+        }
+
+        NSRange afterSOI = NSMakeRange(sRange.location + 2, len - (sRange.location + 2));
+        NSRange eRange = [self.imageData rangeOfData:endMarker options:0 range:afterSOI];
+        if (eRange.location == NSNotFound) {
+            // EOI ещё не пришёл, ждём следующий чанк
+            self.parseCursor = sRange.location;
+            break;
+        }
 
         NSRange imgRange = NSMakeRange(sRange.location,
-                                       eRange.location + endMarker.length - sRange.location);
+                                       eRange.location + 2 - sRange.location);
         NSData *jpeg = [self.imageData subdataWithRange:imgRange];
 
         if (self.pixelBufferCallback) {
@@ -284,8 +308,7 @@ didReceiveResponse:(NSURLResponse *)response
                 self.pixelBufferCallback(pb);
                 CVPixelBufferRelease(pb);
             }
-        }
-        else if (self.frameCallback) {
+        } else if (self.frameCallback) {
             UIImage *image = [UIImage imageWithData:jpeg];
             if (image) {
                 self->_frameCount++;
@@ -296,13 +319,16 @@ didReceiveResponse:(NSURLResponse *)response
             }
         }
 
-        [self.imageData replaceBytesInRange:NSMakeRange(0, eRange.location + endMarker.length)
+        // удалить разобранный кадр из буфера
+        [self.imageData replaceBytesInRange:NSMakeRange(0, eRange.location + 2)
                                   withBytes:NULL length:0];
+        self.parseCursor = 0;
     }
 
-    if (self.imageData.length > 10 * 1024 * 1024) {
+    if (self.imageData.length > 16 * 1024 * 1024) {
         [self.imageData setLength:0];
-        NSLog(@"[VCamStream] Buffer overflow, cleared");
+        self.parseCursor = 0;
+        NSLog(@"[VCamStream] Buffer overflow (>16MB), cleared");
     }
 }
 
