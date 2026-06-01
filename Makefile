@@ -7,8 +7,7 @@ include $(THEOS)/makefiles/common.mk
 TWEAK_NAME = VirtualCamPro
 VirtualCamPro_FILES = Tweak.x MJPEGStreamReader.m
 VirtualCamPro_CFLAGS = -fobjc-arc -Wno-deprecated-declarations
-VirtualCamPro_FRAMEWORKS = UIKit AVFoundation CoreMedia CoreVideo QuartzCore CoreGraphics CoreImage Foundation
-VirtualCamPro_LDFLAGS = -undefined dynamic_lookup
+VirtualCamPro_FRAMEWORKS = UIKit AVFoundation CoreMedia CoreVideo QuartzCore CoreGraphics CoreImage Foundation ImageIO IOSurface
 
 SUBPROJECTS += prefs
 
